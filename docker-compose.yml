@@ -1,0 +1,43 @@
+services:
+  qa-portal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: linux-qa-portal
+    ports:
+      - "8000:8000"
+    environment:
+      QA_PORTAL_HOST: 0.0.0.0
+      QA_PORTAL_PORT: 8000
+      QA_PORTAL_RELOAD: 0
+      QA_PORTAL_AUTOSTART_WORKER: 0
+      QA_PORTAL_DATA_DIR: /app/data
+      AI_ANALYZER_ENABLED: ${AI_ANALYZER_ENABLED:-0}
+      AI_ANALYZER_URL: ${AI_ANALYZER_URL:-}
+      AI_ANALYZER_MODEL: ${AI_ANALYZER_MODEL:-}
+      AI_ANALYZER_API_KEY: ${AI_ANALYZER_API_KEY:-}
+      AI_ANALYZER_PROVIDER: ${AI_ANALYZER_PROVIDER:-openai-compatible}
+      AI_ANALYZER_TIMEOUT_SECONDS: ${AI_ANALYZER_TIMEOUT_SECONDS:-30}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  qa-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: linux-qa-worker
+    command: ["./run-worker.sh"]
+    environment:
+      QA_PORTAL_DATA_DIR: /app/data
+      QA_PORTAL_WORKER_POLL_SECONDS: ${QA_PORTAL_WORKER_POLL_SECONDS:-3}
+      QA_PORTAL_WORKER_PROCESSES: ${QA_PORTAL_WORKER_PROCESSES:-auto}
+      AI_ANALYZER_ENABLED: ${AI_ANALYZER_ENABLED:-0}
+      AI_ANALYZER_URL: ${AI_ANALYZER_URL:-}
+      AI_ANALYZER_MODEL: ${AI_ANALYZER_MODEL:-}
+      AI_ANALYZER_API_KEY: ${AI_ANALYZER_API_KEY:-}
+      AI_ANALYZER_PROVIDER: ${AI_ANALYZER_PROVIDER:-openai-compatible}
+      AI_ANALYZER_TIMEOUT_SECONDS: ${AI_ANALYZER_TIMEOUT_SECONDS:-30}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
