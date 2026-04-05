@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr(title or "ScanForge") }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script>
+    window.ScanForgeI18n = {{ ui_i18n | tojson }};
+  </script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body class="{{ page_class or 'portal-page' }}">
+  <div class="shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow eyebrow-light">ScanForge</p>
+        <h1>{{ tr(heading or "Project analysis from the browser") }}</h1>
+        <p class="lede">
+          {{ tr(lede or "Upload a project archive or a single source file, choose a verification profile, watch progress live, and download HTML or PDF reports.") }}
+        </p>
+        <div class="hero-badges">
+          <span>C/C++</span>
+          <span>{{ tr("Qt Projects") }}</span>
+          <span>{{ tr("Security") }}</span>
+          <span>{{ tr("Fuzzing") }}</span>
+          <span>{{ tr("Adaptive Hardware") }}</span>
+        </div>
+      </div>
+      <div class="hero-side">
+        <div class="hero-actions">
+          <div class="lang-switch" aria-label="{{ tr('Language') }}">
+            <a class="lang-link {% if lang == 'en' %}active{% endif %}" href="{{ lang_switch_urls.en }}">EN</a>
+            <a class="lang-link {% if lang == 'ru' %}active{% endif %}" href="{{ lang_switch_urls.ru }}">RU</a>
+          </div>
+          <a class="ghost-link" href="/">{{ tr("Dashboard") }}</a>
+          <a class="ghost-link" href="/docs">API</a>
+        </div>
+        <div class="hero-visual">
+          <img class="hero-graphic" src="/static/hero-grid.svg" alt="">
+          <div class="hero-caption">
+            <strong>{{ tr("Operator View") }}</strong>
+            <p>{{ tr("One browser surface for upload, execution, review, and release readiness.") }}</p>
+          </div>
+        </div>
+      </div>
+    </header>
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

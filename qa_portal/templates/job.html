@@ -1,0 +1,439 @@
+{% extends "base.html" %}
+{% set title = "Job " + job.id %}
+{% set heading = job.name %}
+{% set page_class = "job-page" %}
+{% set lede = "Track a single run in detail: status, findings, AI review, generated reports, and the live execution trail all stay in one place." %}
+{% block content %}
+<main class="job-layout" data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
+  <section class="panel summary-panel">
+    <div class="job-card-top">
+      <div>
+        <p class="eyebrow">{{ tr("Job {job_id}", job_id=job.id) }}</p>
+        <h2>{{ job.original_filename }}</h2>
+      </div>
+      <span class="status status-{{ job.status }}" id="job-status">{{ label("status", job.status) }}</span>
+    </div>
+    <div class="progress-track large">
+      <div class="progress-bar" id="job-progress-bar" style="width: {{ job.progress }}%"></div>
+    </div>
+    <p id="job-current-step">{{ tr(job.current_step) }}</p>
+
+    <div class="meta-grid">
+      <div><span>{{ tr("Mode") }}</span><strong id="job-mode">{{ label("mode", job.mode) }}</strong></div>
+      <div><span>{{ tr("Preset") }}</span><strong id="job-preset">{{ label("preset", job.options.preset) }}</strong></div>
+      <div><span>{{ tr("Progress") }}</span><strong id="job-progress-text">{{ job.progress }}%</strong></div>
+      <div><span>{{ tr("Input type") }}</span><strong id="job-input-type">{{ label("input_type", job.input_type) }}</strong></div>
+      <div><span>{{ tr("Created") }}</span><strong>{{ job.created_at }}</strong></div>
+      <div><span>{{ tr("Finished") }}</span><strong id="job-finished-at">{{ job.finished_at or tr("in progress") }}</strong></div>
+    </div>
+
+    <div class="tag-row" id="selected-checks">
+      {% for key in selected_checks %}
+      <span class="tag">{{ label("check", key) }}</span>
+      {% endfor %}
+    </div>
+
+    <div class="meta-grid">
+      <div><span>{{ tr("Queue position") }}</span><strong id="job-queue-position">#{{ job.queue_position }}</strong></div>
+      <div><span>{{ tr("Retest scope") }}</span><strong id="job-retest-scope">{{ label("retest_scope", job.options.retest_scope) }}</strong></div>
+      <div><span>{{ tr("Fuzz budget") }}</span><strong id="job-fuzz-budget">{{ job.options.fuzz_duration_seconds }} sec</strong></div>
+      <div><span>{{ tr("Report limit") }}</span><strong id="job-report-limit">{{ job.options.max_report_findings }}</strong></div>
+      <div><span>{{ tr("Source root") }}</span><strong id="job-source-root">{{ job.metadata.get("project", {}).get("relative_root_name", tr("pending")) }}</strong></div>
+      <div><span>{{ tr("Files") }}</span><strong id="job-file-count">{{ job.metadata.get("project", {}).get("file_count", 0) }}</strong></div>
+    </div>
+
+    <div class="button-row" id="artifact-buttons">
+      {% if job.html_report %}
+      <a class="button-secondary" href="/jobs/{{ job.id }}/artifacts/{{ job.html_report }}">{{ tr("HTML report") }}</a>
+      {% endif %}
+      {% if job.pdf_report %}
+      <a class="button-secondary" href="/jobs/{{ job.id }}/artifacts/{{ job.pdf_report }}">{{ tr("PDF report") }}</a>
+      {% endif %}
+      {% for artifact in job.artifacts %}
+      <a class="button-secondary" href="/jobs/{{ job.id }}/artifacts/{{ artifact.filename }}">{{ artifact.label }}</a>
+      {% endfor %}
+      {% if job.status == "queued" or job.status == "running" %}
+      <form action="/jobs/{{ job.id }}/pause" method="post">
+        <button type="submit">{{ tr("Pause") }}</button>
+      </form>
+      {% endif %}
+      {% if job.status == "paused" %}
+      <form action="/jobs/{{ job.id }}/resume" method="post">
+        <button type="submit">{{ tr("Resume") }}</button>
+      </form>
+      {% endif %}
+      {% if job.status == "queued" or job.status == "running" %}
+      <form action="/jobs/{{ job.id }}/cancel" method="post">
+        <button type="submit">{{ tr("Cancel") }}</button>
+      </form>
+      {% endif %}
+      {% if job.status == "queued" or job.status == "paused" %}
+      <form action="/jobs/{{ job.id }}/queue/up" method="post">
+        <button type="submit">{{ tr("Move up") }}</button>
+      </form>
+      <form action="/jobs/{{ job.id }}/queue/down" method="post">
+        <button type="submit">{{ tr("Move down") }}</button>
+      </form>
+      {% endif %}
+      <a class="button-secondary" href="/jobs/{{ job.id }}/rerun">{{ tr("Rerun") }}</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Repeat submission") }}</p>
+        <h2>{{ tr("Scope and baseline") }}</h2>
+      </div>
+    </div>
+    {% set comparison = job.metadata.get("comparison", {}) %}
+    <div class="summary-grid" id="comparison-summary">
+      <div class="summary-card">
+        <span>{{ tr("Scope") }}</span>
+        <strong>{{ label("retest_scope", job.options.retest_scope) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Repeat submission") }}</span>
+        <strong>{{ tr("yes" if job.metadata.get("repeat_submission") else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Baseline job") }}</span>
+        <strong>{{ job.metadata.get("baseline_job_id", tr("none")) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Changed files") }}</span>
+        <strong>{{ comparison.get("changed_file_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Changed text files") }}</span>
+        <strong>{{ comparison.get("changed_text_file_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Removed files") }}</span>
+        <strong>{{ comparison.get("removed_files", []) | length }}</strong>
+      </div>
+    </div>
+    <div class="reference-list compact" id="comparison-files">
+      {% if comparison.get("changed_files") %}
+      {% for path in comparison.get("changed_files", [])[:10] %}
+      <article class="reference-item">
+        <strong>{{ tr("Changed") }}</strong>
+        <p>{{ path }}</p>
+      </article>
+      {% endfor %}
+      {% for path in comparison.get("removed_files", [])[:5] %}
+      <article class="reference-item">
+        <strong>{{ tr("Removed") }}</strong>
+        <p>{{ path }}</p>
+      </article>
+      {% endfor %}
+      {% elif job.metadata.get("repeat_submission") %}
+      <p class="empty-state">{{ tr("This run is linked to a previous submission, but a file-level diff is not available yet.") }}</p>
+      {% else %}
+      <p class="empty-state">{{ tr("This job is the first known submission for the selected project identity.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Executive summary") }}</p>
+        <h2>{{ tr("Decision snapshot") }}</h2>
+      </div>
+    </div>
+    <div class="summary-grid" id="decision-summary">
+      <div class="summary-card">
+        <span>{{ tr("Risk score") }}</span>
+        <strong>{{ job.summaries.get("risk_score", 0) }}/100</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Highest severity") }}</span>
+        <strong>{{ label("severity", job.summaries.get("highest_severity", "pending")) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Execution verdict") }}</span>
+        <strong>{{ job.summaries.get("execution_verdict", tr("pending")) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Total findings") }}</span>
+        <strong>{{ job.summaries.get("total_findings", 0) }}</strong>
+      </div>
+    </div>
+    <div class="action-list" id="next-actions">
+      {% for action in job.summaries.get("next_actions", []) %}
+      <article class="action-card">
+        <strong>{{ action.title }}</strong>
+        <small>{{ label("severity", action.severity) }}</small>
+        <p>{{ action.recommendation }}</p>
+      </article>
+      {% endfor %}
+      {% if not job.summaries.get("next_actions") %}
+      <p class="empty-state">{{ tr("Recommended next actions will appear after report generation.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Assistant Layer") }}</p>
+        <h2>{{ tr("AI review") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("Backend mode: {mode}. Provider: {provider}.", mode=ai_backend.mode, provider=ai_backend.provider) }}
+      </p>
+    </div>
+    <div id="ai-review">
+      {% set review = job.metadata.get("ai_review", {}) %}
+      {% if review %}
+      <div class="summary-grid">
+        <div class="summary-card">
+          <span>{{ tr("Source") }}</span>
+          <strong>{{ review.get("source", "unknown") }}</strong>
+        </div>
+        <div class="summary-card">
+          <span>{{ tr("Decision") }}</span>
+          <strong>{{ review.get("release_decision", tr("pending")) }}</strong>
+        </div>
+        <div class="summary-card">
+          <span>{{ tr("Confidence") }}</span>
+          <strong>{{ review.get("confidence", tr("pending")) }}</strong>
+        </div>
+      </div>
+      <article class="action-card">
+        <strong>{{ tr("Overview") }}</strong>
+        <p>{{ review.get("overview", tr("No AI review yet.")) }}</p>
+      </article>
+      <article class="action-card">
+        <strong>{{ tr("Risk Narrative") }}</strong>
+        <p>{{ review.get("risk_narrative", tr("No risk narrative yet.")) }}</p>
+      </article>
+      <div class="two-column">
+        <article class="action-card">
+          <strong>{{ tr("Blockers") }}</strong>
+          {% for item in review.get("blockers", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+        </article>
+        <article class="action-card">
+          <strong>{{ tr("Quick Wins") }}</strong>
+          {% for item in review.get("quick_wins", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+        </article>
+      </div>
+      <p class="empty-state">{{ review.get("reason", "") }}</p>
+      {% else %}
+      <p class="empty-state">{{ tr("AI review will appear during report generation.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Threat Intel") }}</p>
+        <h2>{{ tr("Knowledge base") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("Local mirrors of CWE, CAPEC, NVD, CISA KEV, and FSTEC are used to annotate findings and surface related references.") }}
+      </p>
+    </div>
+    {% set kb = job.metadata.get("knowledge_base", {}) %}
+    <div class="summary-grid" id="kb-summary">
+      <div class="summary-card">
+        <span>{{ tr("Mirror") }}</span>
+        <strong>{{ tr("ready" if kb.get("available") else "pending") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Sources") }}</span>
+        <strong>{{ kb.get("source_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Matched refs") }}</span>
+        <strong>{{ kb.get("matched_reference_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Project refs") }}</span>
+        <strong>{{ kb.get("project_reference_count", 0) }}</strong>
+      </div>
+    </div>
+    <div class="reference-list" id="kb-top-references">
+      {% for reference in kb.get("top_references", []) %}
+      <article class="reference-item">
+        <strong>{{ reference.id }}</strong>
+        <p>{{ reference.title }}</p>
+        <small>{{ reference.source }}</small>
+      </article>
+      {% endfor %}
+      {% if not kb.get("top_references") %}
+      <p class="empty-state">{{ tr("Knowledge base matches will appear once reporting begins.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr("Execution") }}</h2>
+    <div class="summary-grid" id="execution-summary">
+      <div class="summary-card">
+        <span>{{ tr("Configured") }}</span>
+        <strong>{{ tr("yes" if job.metadata.get("functionality", {}).get("configured") else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Built") }}</span>
+        <strong>{{ tr("yes" if job.metadata.get("functionality", {}).get("built") else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Tests ran") }}</span>
+        <strong>{{ tr("yes" if job.metadata.get("functionality", {}).get("tests_ran") else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Build system") }}</span>
+        <strong>{{ job.metadata.get("project", {}).get("build_systems", []) | join(", ") or tr("none") }}</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr("Adaptive hardware plan") }}</h2>
+    {% set host = job.metadata.get("host_hardware", {}) %}
+    {% set plan = job.metadata.get("execution_plan", {}) %}
+    <div class="summary-grid" id="hardware-plan-summary">
+      <div class="summary-card">
+        <span>{{ tr("CPU budget") }}</span>
+        <strong>{{ plan.get("cpu_threads_for_job", 0) }} / {{ host.get("cpu_threads_target", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("RAM budget") }}</span>
+        <strong>{{ plan.get("memory_mb_for_job", 0) }} MB</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("GPU strategy") }}</span>
+        <strong>{{ plan.get("gpu_strategy", tr("pending")) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Assigned GPUs") }}</span>
+        <strong>{{ plan.get("assigned_gpu_ids", []) | join(", ") or "cpu-only" }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Build threads") }}</span>
+        <strong>{{ plan.get("build_parallelism", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Suggested workers") }}</span>
+        <strong>{{ plan.get("suggested_worker_processes", 0) }}</strong>
+      </div>
+    </div>
+    <div class="reference-list compact" id="gpu-inventory">
+      {% for gpu in host.get("gpus", []) %}
+      <article class="reference-item">
+        <strong>GPU {{ gpu.index }}</strong>
+        <p>{{ gpu.name }}</p>
+        <small>{{ gpu.memory_total_mb }} MB</small>
+      </article>
+      {% endfor %}
+      {% if not host.get("gpus") %}
+      <p class="empty-state">{{ tr("No GPU inventory was attached to this job. CPU/RAM adaptive planning is still active.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr("Pipeline steps") }}</h2>
+    <div class="steps" id="steps-container">
+      {% for step in job.steps %}
+      <div class="step">
+        <div class="job-card-top">
+          <strong>{{ tr(step.title) }}</strong>
+          <span class="status status-{{ step.status }}">{{ label("status", step.status) }}</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar" style="width: {{ step.progress }}%"></div>
+        </div>
+        <small>{{ tr(step.message or "Waiting") }}</small>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr("Findings summary") }}</h2>
+    <div class="summary-grid" id="severity-summary">
+      {% if job.summaries %}
+      {% for severity, count in job.summaries.severity_counts.items() %}
+      <div class="summary-card">
+        <span>{{ label("severity", severity) }}</span>
+        <strong>{{ count }}</strong>
+      </div>
+      {% endfor %}
+      {% else %}
+      <p class="empty-state">{{ tr("Findings will appear after the analysis reaches the reporting stage.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr("Findings") }}</h2>
+    <div class="finding-list" id="finding-list">
+      {% if findings %}
+      {% for finding in findings %}
+      <article class="finding-card severity-{{ finding.severity }}">
+        <div class="job-card-top">
+          <strong>{{ finding.title }}</strong>
+          <span class="status status-{{ 'failed' if finding.severity in ['critical', 'high'] else 'running' if finding.severity == 'medium' else 'skipped' }}">{{ label("severity", finding.severity) }}</span>
+        </div>
+        <p class="finding-meta">{{ label("category", finding.category) }}{% if finding.path %} | {{ finding.path }}{% endif %}{% if finding.line %}:{{ finding.line }}{% endif %}</p>
+        <p>{{ finding.description }}</p>
+        {% if finding.references %}
+        <div class="reference-list compact">
+          {% for reference in finding.references[:4] %}
+          <article class="reference-item">
+            <strong>{{ reference.id }}</strong>
+            <p>{{ reference.title }}</p>
+            <small>{{ reference.source }}</small>
+          </article>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if finding.recommendation %}
+        <small>{{ finding.recommendation }}</small>
+        {% endif %}
+      </article>
+      {% endfor %}
+      {% else %}
+      <p class="empty-state">{{ tr("No findings yet.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr("Detected tools") }}</h2>
+    <div class="tool-list" id="tool-list">
+      {% for tool, path in job.metadata.get("tools", {}).items() %}
+      <div class="tool-row">
+        <code>{{ tool }}</code>
+        <span class="status status-{{ 'completed' if path else 'skipped' }}">{{ path or tr("not installed") }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr("HTML preview") }}</h2>
+    <div id="report-preview">
+      {% if report_preview_url %}
+      <iframe class="report-frame" src="{{ report_preview_url }}" title="{{ tr('HTML preview') }}"></iframe>
+      {% else %}
+      <p class="empty-state">{{ tr("HTML report preview will appear after report generation.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel panel-span-2">
+    <h2>{{ tr("Live log") }}</h2>
+    <pre class="log-box" id="job-log">{% for line in job.logs %}{{ line }}
+{% endfor %}</pre>
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ tr("QA Report") }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 32px; color: #1a2333; background: #f5f9ff; }
+    h1, h2 { margin-bottom: 8px; }
+    .meta, .summary, .project, .actions, .categories { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+    .card { border: 1px solid #ccd6e3; border-radius: 12px; padding: 12px 14px; min-width: 160px; background: #ffffff; }
+    .finding { border-bottom: 1px solid #dde5ef; padding: 12px 0; }
+    .references { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .reference-card { border: 1px solid #d9e2ee; border-radius: 12px; padding: 10px 12px; background: #fbfdff; min-width: 200px; flex: 1 1 220px; }
+    .reference-card small { display: block; color: #64748b; margin-top: 6px; }
+    .severity-critical { color: #9b1c1c; }
+    .severity-high { color: #c2410c; }
+    .severity-medium { color: #9a6700; }
+    .severity-low { color: #155e75; }
+    .severity-info { color: #334155; }
+    .tag { display: inline-block; margin: 0 8px 8px 0; padding: 6px 10px; border-radius: 999px; background: #e6fffb; color: #155e75; }
+    .tag-muted { background: #eef2f7; color: #475569; }
+    code { background: #eef2f8; padding: 2px 5px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>{{ tr("ScanForge Report") }}</h1>
+  <p>{{ tr("Job") }} <strong>{{ report.job.name }}</strong> ({{ report.job.id }})</p>
+  <div class="meta">
+    <div class="card"><strong>{{ tr("Mode") }}</strong><br>{{ label("mode", report.job.mode) }}</div>
+    <div class="card"><strong>{{ tr("Status") }}</strong><br>{{ label("status", report.job.status) }}</div>
+    <div class="card"><strong>{{ tr("Preset") }}</strong><br>{{ label("preset", report.job.options.preset) }}</div>
+    <div class="card"><strong>{{ tr("Retest scope") }}</strong><br>{{ label("retest_scope", report.job.options.retest_scope) }}</div>
+    <div class="card"><strong>{{ tr("Input") }}</strong><br>{{ report.job.original_filename }}</div>
+    <div class="card"><strong>{{ tr("Files") }}</strong><br>{{ report.project.file_count }}</div>
+  </div>
+
+  <h2>{{ tr("Executive summary") }}</h2>
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Risk score") }}</strong><br>{{ report.summary.risk_score }}/100</div>
+    <div class="card"><strong>{{ tr("Highest severity") }}</strong><br>{{ label("severity", report.summary.highest_severity) }}</div>
+    <div class="card"><strong>{{ tr("Execution verdict") }}</strong><br>{{ report.summary.execution_verdict }}</div>
+    <div class="card"><strong>{{ tr("Total findings") }}</strong><br>{{ report.summary.total_findings }}</div>
+  </div>
+
+  <h2>{{ tr("Selected checks") }}</h2>
+  <div>
+    {% for check in report.summary.selected_checks %}
+    <span class="tag">{{ label("check", check) }}</span>
+    {% endfor %}
+    {% if not report.summary.selected_checks %}
+    <p>{{ tr("No checks were enabled.") }}</p>
+    {% endif %}
+  </div>
+
+  <h2>{{ tr("Severity breakdown") }}</h2>
+  <div class="summary">
+    {% for severity, count in report.summary.severity_counts.items() %}
+    <div class="card">
+      <strong>{{ label("severity", severity) }}</strong><br>{{ count }}
+    </div>
+    {% endfor %}
+  </div>
+
+  <h2>{{ tr("Category breakdown") }}</h2>
+  <div class="categories">
+    {% for item in report.summary.category_breakdown %}
+    <div class="card">
+      <strong>{{ label("category", item.category) }}</strong><br>{{ item.count }}
+    </div>
+    {% endfor %}
+  </div>
+
+  <h2>{{ tr("Recommended next actions") }}</h2>
+  <div class="actions">
+    {% for action in report.summary.next_actions %}
+    <div class="card">
+      <strong class="severity-{{ action.severity }}">{{ action.title }}</strong>
+      <p>{{ action.recommendation }}</p>
+    </div>
+    {% endfor %}
+    {% if not report.summary.next_actions %}
+    <p>{{ tr("No prioritized actions were generated.") }}</p>
+    {% endif %}
+  </div>
+
+  <h2>{{ tr("AI Review") }}</h2>
+  {% if report.ai_review %}
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Source") }}</strong><br>{{ report.ai_review.source }}</div>
+    <div class="card"><strong>{{ tr("Decision") }}</strong><br>{{ report.ai_review.release_decision }}</div>
+    <div class="card"><strong>{{ tr("Confidence") }}</strong><br>{{ report.ai_review.confidence }}</div>
+  </div>
+  <div class="actions">
+    <div class="card">
+      <strong>{{ tr("Overview") }}</strong>
+      <p>{{ report.ai_review.overview }}</p>
+    </div>
+    <div class="card">
+      <strong>{{ tr("Risk Narrative") }}</strong>
+      <p>{{ report.ai_review.risk_narrative }}</p>
+    </div>
+  </div>
+  <div class="actions">
+    <div class="card">
+      <strong>{{ tr("Blockers") }}</strong>
+      {% for item in report.ai_review.blockers %}
+      <p>{{ item }}</p>
+      {% endfor %}
+    </div>
+    <div class="card">
+      <strong>{{ tr("Quick Wins") }}</strong>
+      {% for item in report.ai_review.quick_wins %}
+      <p>{{ item }}</p>
+      {% endfor %}
+    </div>
+  </div>
+  <p>{{ report.ai_review.reason }}</p>
+  {% else %}
+  <p>{{ tr("No AI review was generated for this report.") }}</p>
+  {% endif %}
+
+  <h2>{{ tr("Project snapshot") }}</h2>
+  <div class="project">
+    <div class="card"><strong>{{ tr("Root") }}</strong><br>{{ report.project.relative_root_name }}</div>
+    <div class="card"><strong>{{ tr("Build systems") }}</strong><br>{{ report.project.build_systems | join(", ") or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Qt markers") }}</strong><br>{{ tr("yes" if report.project.is_qt_project else "no") }}</div>
+    <div class="card"><strong>{{ tr("Tests detected") }}</strong><br>{{ tr("yes" if report.project.has_tests else "no") }}</div>
+  </div>
+
+  {% if report.comparison %}
+  <h2>{{ tr("Retest baseline") }}</h2>
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Repeat submission") }}</strong><br>{{ tr("yes" if report.job.metadata.repeat_submission else "no") }}</div>
+    <div class="card"><strong>{{ tr("Baseline job") }}</strong><br>{{ report.comparison.baseline_job_id or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Changed files") }}</strong><br>{{ report.comparison.changed_file_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Changed text files") }}</strong><br>{{ report.comparison.changed_text_file_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Removed files") }}</strong><br>{{ report.comparison.removed_files | length }}</div>
+  </div>
+  {% if report.comparison.changed_files or report.comparison.removed_files %}
+  <div class="references">
+    {% for path in report.comparison.changed_files[:10] %}
+    <div class="reference-card">
+      <strong>{{ tr("Changed") }}</strong>
+      <div>{{ path }}</div>
+    </div>
+    {% endfor %}
+    {% for path in report.comparison.removed_files[:5] %}
+    <div class="reference-card">
+      <strong>{{ tr("Removed") }}</strong>
+      <div>{{ path }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <h2>{{ tr("Adaptive Hardware Plan") }}</h2>
+  <div class="summary">
+    <div class="card"><strong>{{ tr("CPU target") }}</strong><br>{{ report.host_hardware.cpu_threads_target }}/{{ report.host_hardware.cpu_threads_total }}</div>
+    <div class="card"><strong>{{ tr("RAM target") }}</strong><br>{{ report.host_hardware.memory_target_mb }} MB</div>
+    <div class="card"><strong>{{ tr("GPUs") }}</strong><br>{{ report.host_hardware.gpu_count }}</div>
+    <div class="card"><strong>{{ tr("Job CPU budget") }}</strong><br>{{ report.execution_plan.cpu_threads_for_job }}</div>
+    <div class="card"><strong>{{ tr("Job RAM budget") }}</strong><br>{{ report.execution_plan.memory_mb_for_job }} MB</div>
+    <div class="card"><strong>{{ tr("GPU strategy") }}</strong><br>{{ report.execution_plan.gpu_strategy }}</div>
+  </div>
+  {% if report.host_hardware.gpus %}
+  <div class="references">
+    {% for gpu in report.host_hardware.gpus %}
+    <div class="reference-card">
+      <strong>GPU {{ gpu.index }}</strong>
+      <div>{{ gpu.name }}</div>
+      <small>{{ gpu.memory_total_mb }} MB</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <h2>{{ tr("Local Knowledge Base") }}</h2>
+  {% if report.knowledge_base %}
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Mirror available") }}</strong><br>{{ tr("yes" if report.knowledge_base.available else "no") }}</div>
+    <div class="card"><strong>{{ tr("Sources ready") }}</strong><br>{{ report.knowledge_base.source_count }}</div>
+    <div class="card"><strong>{{ tr("Matched references") }}</strong><br>{{ report.knowledge_base.matched_reference_count }}</div>
+    <div class="card"><strong>{{ tr("Project refs") }}</strong><br>{{ report.knowledge_base.project_reference_count }}</div>
+    <div class="card"><strong>{{ tr("Last sync") }}</strong><br>{{ report.knowledge_base.updated_at or tr("pending") }}</div>
+  </div>
+  <div>
+    {% for source in report.knowledge_base.sources %}
+    <span class="tag {% if source.status != 'ready' and source.status != 'cached' %}tag-muted{% endif %}">
+      {{ source.label }}: {{ source.count }}
+    </span>
+    {% endfor %}
+  </div>
+  {% if report.knowledge_base.top_references %}
+  <div class="references">
+    {% for reference in report.knowledge_base.top_references %}
+    <div class="reference-card">
+      <strong>{{ reference.id }}</strong>
+      <div>{{ reference.title }}</div>
+      <small>{{ reference.source }}</small>
+      {% if reference.flags %}
+      <small>{{ reference.flags | join(", ") }}</small>
+      {% endif %}
+      {% if reference.summary %}
+      <p>{{ reference.summary }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% else %}
+  <p>{{ tr("No local mirror data was available during report generation.") }}</p>
+  {% endif %}
+
+  <h2>{{ tr("Detected tools") }}</h2>
+  <ul>
+    {% for tool, path in report.tools.items() %}
+    <li><code>{{ tool }}</code>: {{ path or tr("not installed") }}</li>
+    {% endfor %}
+  </ul>
+
+  <h2>{{ tr("Top findings") }}</h2>
+  {% for finding in report.summary.top_findings %}
+  <div class="finding">
+    <strong class="severity-{{ finding.severity }}">[{{ finding.severity.upper() }}]</strong>
+    {{ label("category", finding.category) }} | {{ finding.title }}
+    <br>
+    <small>
+      {{ finding.path or "project" }}{% if finding.line %}:{{ finding.line }}{% endif %}
+      {% if finding.source %} | {{ finding.source }}{% endif %}
+    </small>
+    <p>{{ finding.description }}</p>
+    {% if finding.references %}
+    <div class="references">
+      {% for reference in finding.references[:4] %}
+      <div class="reference-card">
+        <strong>{{ reference.id }}</strong>
+        <div>{{ reference.title }}</div>
+        <small>{{ reference.source }}</small>
+        {% if reference.flags %}
+        <small>{{ reference.flags | join(", ") }}</small>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if finding.recommendation %}
+    <p><strong>{{ tr("Recommendation:") }}</strong> {{ finding.recommendation }}</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+</body>
+</html>

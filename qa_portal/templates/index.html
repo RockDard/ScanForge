@@ -1,0 +1,457 @@
+{% extends "base.html" %}
+{% set title = "ScanForge" %}
+{% set heading = "C/C++ and Qt-oriented project analysis on Linux" %}
+{% set page_class = "dashboard-page" %}
+{% set lede = "Build a scan from the browser, tune the depth of verification, and keep a live view of security, quality, fuzzing, and execution health in one control room." %}
+{% block content %}
+<section class="stats-strip">
+  <div class="summary-card">
+    <span>{{ tr("Visible jobs") }}</span>
+    <strong>{{ overview.total_jobs }}</strong>
+  </div>
+  <div class="summary-card">
+    <span>{{ tr("Queued") }}</span>
+    <strong>{{ overview.queued_jobs }}</strong>
+  </div>
+  <div class="summary-card">
+    <span>{{ tr("Paused") }}</span>
+    <strong>{{ overview.paused_jobs }}</strong>
+  </div>
+  <div class="summary-card">
+    <span>{{ tr("Running") }}</span>
+    <strong>{{ overview.running_jobs }}</strong>
+  </div>
+  <div class="summary-card">
+    <span>{{ tr("Completed") }}</span>
+    <strong>{{ overview.completed_jobs }}</strong>
+  </div>
+  <div class="summary-card">
+    <span>{{ tr("Failed") }}</span>
+    <strong>{{ overview.failed_jobs }}</strong>
+  </div>
+  <div class="summary-card">
+    <span>{{ tr("High risk") }}</span>
+    <strong>{{ overview.risky_jobs }}</strong>
+  </div>
+</section>
+
+<main class="dashboard-layout">
+  <section class="panel panel-span-2">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Upload workflow") }}</p>
+        <h2>{{ tr("Create job") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("Upload a project archive or a single source file, pick a preset, then refine the enabled checks before launch.") }}
+      </p>
+    </div>
+
+    <form
+      class="upload-form"
+      action="/jobs"
+      method="post"
+      enctype="multipart/form-data"
+      data-preset-form
+      data-known-projects='{{ known_repeat_projects | tojson }}'
+      data-presets='{{ presets | tojson }}'
+    >
+      <div class="two-column">
+        <label>
+          <span>{{ tr("Job name") }}</span>
+          <input type="text" name="name" placeholder="{{ tr('Qt desktop audit') }}">
+        </label>
+        <label>
+          <span>{{ tr("Analysis mode") }}</span>
+          <select name="mode" data-mode-select>
+            {% for value, label_text in modes %}
+            <option value="{{ value }}">{{ label_text }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <div class="preset-grid">
+        {% for preset in presets %}
+        <label class="preset-card {% if preset.key == 'balanced' %}selected{% endif %}">
+          <input
+            type="radio"
+            name="preset"
+            value="{{ preset.key }}"
+            {% if preset.key == 'balanced' %}checked{% endif %}
+            data-preset-option
+          >
+          <strong>{{ preset.label }}</strong>
+          <small>{{ preset.description }}</small>
+        </label>
+        {% endfor %}
+      </div>
+
+      <div class="card-grid">
+        <label class="toggle-card">
+          <input type="checkbox" name="run_functionality" checked data-check="functionality">
+          <strong>{{ tr("Functionality") }}</strong>
+          <small>{{ tr("Configure, build and run tests when possible.") }}</small>
+        </label>
+        <label class="toggle-card">
+          <input type="checkbox" name="run_security" checked data-check="security">
+          <strong>{{ tr("Security") }}</strong>
+          <small>{{ tr("Unsafe APIs, secrets and basic vulnerability smells.") }}</small>
+        </label>
+        <label class="toggle-card">
+          <input type="checkbox" name="run_style" checked data-check="style">
+          <strong>{{ tr("Style") }}</strong>
+          <small>{{ tr("Formatting, clang-tidy and readability-oriented checks.") }}</small>
+        </label>
+        <label class="toggle-card">
+          <input type="checkbox" name="run_quality" checked data-check="quality">
+          <strong>{{ tr("Quality") }}</strong>
+          <small>{{ tr("Maintainability and cppcheck diagnostics.") }}</small>
+        </label>
+        <label class="toggle-card" data-fuzz-card>
+          <input type="checkbox" name="run_fuzzing" data-check="fuzzing">
+          <strong>{{ tr("Fuzzing") }}</strong>
+          <small data-fuzz-copy>{{ tr("Generate harnesses, plan corpus work and fuzz workflow.") }}</small>
+        </label>
+      </div>
+
+      <div class="two-column">
+        <label>
+          <span>{{ tr("Fuzz time budget, seconds") }}</span>
+          <input type="number" name="fuzz_duration_seconds" min="10" max="3600" value="60" data-field="fuzz_duration_seconds">
+        </label>
+        <label>
+          <span>{{ tr("Max findings in reports") }}</span>
+          <input type="number" name="max_report_findings" min="20" max="1000" value="200" data-field="max_report_findings">
+        </label>
+      </div>
+
+      <label class="file-field">
+        <span>{{ tr("Upload one or several project archives or source files") }}</span>
+        <input type="hidden" name="retest_scope" value="full_project" data-retest-scope-input>
+        <input type="file" name="upload" multiple required data-upload-input>
+      </label>
+
+      <section class="repeat-question" data-repeat-question hidden>
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">{{ tr("Repeat submission") }}</p>
+            <h2>{{ tr("How should this rerun be tested?") }}</h2>
+          </div>
+        </div>
+        <p class="section-copy" data-repeat-copy>
+          {{ tr("A previous run of this project was found in the portal history.") }}
+        </p>
+        <div class="preset-grid retest-grid">
+          <button class="preset-card retest-card" type="button" data-retest-choice="changes_only">
+            <strong>{{ tr("Changes only") }}</strong>
+            <small>{{ tr("Compare against the previous upload, focus checks on changed files, and generate a delta-oriented report.") }}</small>
+          </button>
+          <button class="preset-card retest-card" type="button" data-retest-choice="full_project">
+            <strong>{{ tr("Full project") }}</strong>
+            <small>{{ tr("Ignore the narrow diff scope and rerun the complete verification profile for the whole project.") }}</small>
+          </button>
+        </div>
+        <p class="empty-state" data-repeat-selection>{{ tr("Choose a rerun strategy for the repeated project submission.") }}</p>
+      </section>
+
+      <div class="form-footer">
+        <p class="empty-state" data-preset-summary>{{ tr("Balanced preset selected.") }}</p>
+        <button type="submit">{{ tr("Start analysis") }}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Toolchain") }}</p>
+        <h2>{{ tr("Host toolchain") }}</h2>
+      </div>
+    </div>
+    <div class="tool-list">
+      {% for tool, path in tools.items() %}
+      <div class="tool-row">
+        <code>{{ tool }}</code>
+        <span class="status status-{{ 'completed' if path else 'skipped' }}">{{ path or tr("not installed") }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Adaptive Runtime") }}</p>
+        <h2>{{ tr("Host hardware") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("The portal targets {percent}% of the host by default and adapts worker count and per-job budgets to the detected hardware.", percent=hardware.utilization_target_percent) }}
+      </p>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span>{{ tr("CPU target") }}</span>
+        <strong>{{ hardware.cpu_threads_target }}/{{ hardware.cpu_threads_total }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("RAM target") }}</span>
+        <strong>{{ hardware.memory_target_mb }} MB</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("GPUs") }}</span>
+        <strong>{{ hardware.gpu_count }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Recommended workers") }}</span>
+        <strong>{{ recommended_workers }}</strong>
+      </div>
+    </div>
+    <div class="reference-list compact">
+      {% for gpu in hardware.gpus %}
+      <article class="reference-item">
+        <strong>GPU {{ gpu.index }}</strong>
+        <p>{{ gpu.name }}</p>
+        <small>{{ gpu.memory_total_mb }} MB{% if gpu.utilization_percent is not none %} · {{ gpu.utilization_percent }}% util{% endif %}</small>
+      </article>
+      {% endfor %}
+      {% if not hardware.gpus %}
+      <p class="empty-state">{{ tr("No NVIDIA GPUs were detected, so the portal will run in CPU/RAM adaptive mode.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Assistant Layer") }}</p>
+        <h2>{{ tr("AI review backend") }}</h2>
+      </div>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span>{{ tr("Mode") }}</span>
+        <strong>{{ ai_backend.mode }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Worker mode") }}</span>
+        <strong>{{ worker_mode }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Provider") }}</span>
+        <strong>{{ ai_backend.provider }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Model") }}</span>
+        <strong>{{ ai_backend.model }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Status") }}</span>
+        <strong>{{ tr("ready" if ai_backend.configured else "fallback") }}</strong>
+      </div>
+    </div>
+    <p class="section-copy">
+      {% if ai_backend.configured %}
+      {{ tr("Remote AI review is configured and will augment the scan reports.") }}
+      {% else %}
+      {{ tr("Remote AI review is not configured, so the portal will generate a deterministic local review instead.") }}
+      {% endif %}
+    </p>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Threat Intel") }}</p>
+        <h2>{{ tr("Local knowledge base") }}</h2>
+      </div>
+      <div class="section-actions">
+        <form action="/knowledge-base/sync" method="post">
+          <input type="hidden" name="next_url" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+          <button type="submit" class="button-secondary" {% if knowledge_base.sync.running %}disabled{% endif %}>{{ tr("Sync now") }}</button>
+        </form>
+      </div>
+      <p class="section-copy">
+        {{ tr("Local mirrors of official vulnerability catalogs are used to enrich findings and make reports more informative.") }}
+      </p>
+    </div>
+    {% if knowledge_base.sync.running %}
+    <p class="queue-hint">{{ tr("Synchronization is already running.") }}</p>
+    {% endif %}
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span>{{ tr("Status") }}</span>
+        <strong>{{ tr("ready" if knowledge_base.available else "empty") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Sources") }}</span>
+        <strong>{{ knowledge_base.successful_sources }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Updated") }}</span>
+        <strong>{{ knowledge_base.updated_at or tr("pending") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Stale") }}</span>
+        <strong>{{ tr("yes" if knowledge_base.stale else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Weekly sync") }}</span>
+        <strong>{{ tr("on" if knowledge_base.weekly_schedule.enabled else "off") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("NVD yearly") }}</span>
+        <strong>{{ knowledge_base.nvd_yearly.year_count if knowledge_base.nvd_yearly.enabled else 0 }}</strong>
+      </div>
+    </div>
+    <p class="section-copy">
+      {% if knowledge_base.weekly_schedule.enabled %}
+      {{ tr("Weekly sync is scheduled for {day} at {time}.", day=tr(knowledge_base.weekly_schedule.day_label), time="%02d:%02d"|format(knowledge_base.weekly_schedule.hour, knowledge_base.weekly_schedule.minute)) }}
+      {% else %}
+      {{ tr("Weekly sync is disabled.") }}
+      {% endif %}
+      {% if knowledge_base.nvd_yearly.enabled %}
+      {{ tr("The portal is configured to maintain an NVD yearly mirror from {year_start} to {year_end}.", year_start=knowledge_base.nvd_yearly.year_start, year_end=knowledge_base.nvd_yearly.year_end) }}
+      {% endif %}
+    </p>
+    <div class="reference-list compact">
+      {% for source in knowledge_base.sources_list %}
+      <article class="reference-item">
+        <strong>{{ source.label }}</strong>
+        <small>
+          {{ source.status }}{% if source.count %} · {{ source.count }}{% endif %}
+          {% if source.year_start and source.year_end %} · {{ source.year_start }}-{{ source.year_end }}{% endif %}
+        </small>
+      </article>
+      {% endfor %}
+      {% if not knowledge_base.sources_list %}
+      <p class="empty-state">{{ tr("Knowledge base sync has not been run yet.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("History") }}</p>
+        <h2>{{ tr("Filter jobs") }}</h2>
+      </div>
+      <p class="section-copy">{{ tr("Showing {visible} of {total} saved jobs.", visible=jobs|length, total=all_jobs_count) }}</p>
+    </div>
+    <form class="filter-grid" action="/" method="get">
+      <label>
+        <span>{{ tr("Search") }}</span>
+        <input type="text" name="query" value="{{ filters.query }}" placeholder="{{ tr('name, file, or job id') }}">
+      </label>
+      <label>
+        <span>{{ tr("Status") }}</span>
+        <select name="status">
+          <option value="all" {% if filters.status == 'all' %}selected{% endif %}>{{ tr("All") }}</option>
+          <option value="queued" {% if filters.status == 'queued' %}selected{% endif %}>{{ tr("Queued") }}</option>
+          <option value="running" {% if filters.status == 'running' %}selected{% endif %}>{{ tr("Running") }}</option>
+          <option value="paused" {% if filters.status == 'paused' %}selected{% endif %}>{{ tr("Paused") }}</option>
+          <option value="completed" {% if filters.status == 'completed' %}selected{% endif %}>{{ tr("Completed") }}</option>
+          <option value="failed" {% if filters.status == 'failed' %}selected{% endif %}>{{ tr("Failed") }}</option>
+          <option value="cancelled" {% if filters.status == 'cancelled' %}selected{% endif %}>{{ tr("Cancelled") }}</option>
+        </select>
+      </label>
+      <label>
+        <span>{{ tr("Mode") }}</span>
+        <select name="mode">
+          <option value="all" {% if filters.mode == 'all' %}selected{% endif %}>{{ tr("All") }}</option>
+          {% for value, label_text in modes %}
+          <option value="{{ value }}" {% if filters.mode == value %}selected{% endif %}>{{ label_text }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>{{ tr("Preset") }}</span>
+        <select name="preset">
+          <option value="all" {% if filters.preset == 'all' %}selected{% endif %}>{{ tr("All") }}</option>
+          {% for preset in presets %}
+          <option value="{{ preset.key }}" {% if filters.preset == preset.key %}selected{% endif %}>{{ preset.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button type="submit">{{ tr("Apply filters") }}</button>
+        <a class="ghost-link" href="/">{{ tr("Reset") }}</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel panel-span-2">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Queue") }}</p>
+        <h2>{{ tr("Recent jobs") }}</h2>
+      </div>
+      <p class="section-copy">{{ tr("The latest runs stay visible here with their scan posture, status, and current execution pulse.") }}</p>
+    </div>
+    <p class="queue-hint">{{ tr("Queued and paused jobs can be dragged directly on the dashboard to reorder the queue.") }}</p>
+    {% if jobs %}
+    <div class="job-list" data-queue-list>
+      {% for job in queue_jobs %}
+      <article
+        class="job-card {% if job.status == 'queued' or job.status == 'paused' %}queue-draggable{% endif %}"
+        data-queue-job-id="{{ job.id }}"
+        data-queue-movable="{{ 'true' if job.status == 'queued' or job.status == 'paused' else 'false' }}"
+        data-queue-position="{{ job.queue_position }}"
+        draggable="{{ 'true' if job.status == 'queued' or job.status == 'paused' else 'false' }}"
+      >
+        <div class="job-card-top">
+          <strong>
+            <a class="job-card-link" href="/jobs/{{ job.id }}">{{ job.name }}</a>
+            {% if job.status == "queued" or job.status == "paused" %}
+            <span class="drag-handle" aria-hidden="true">{{ tr("Drag") }}</span>
+            {% endif %}
+          </strong>
+          <span class="status status-{{ job.status }}">{{ label("status", job.status) }}</span>
+        </div>
+        <p>{{ job.original_filename }}</p>
+        <p class="queue-meta">{{ tr("Queue #{position}", position=job.queue_position) }}</p>
+        <div class="tag-row">
+          <span class="tag tag-soft">{{ label("preset", job.options.preset) }}</span>
+          {% if job.metadata.get("repeat_submission") %}
+          <span class="tag tag-soft">{{ label("retest_scope", job.options.retest_scope) if job.options.retest_scope == "changes_only" else tr("full retest") }}</span>
+          {% endif %}
+          {% for key in job.options.enabled_checks(job.mode) %}
+          <span class="tag">{{ label("check", key) }}</span>
+          {% endfor %}
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar" style="width: {{ job.progress }}%"></div>
+        </div>
+        <div class="job-card-foot">
+          <small>{{ tr(job.current_step) }}</small>
+          <small>{{ job.progress }}%</small>
+        </div>
+        <div class="queue-controls">
+          {% if job.status == "queued" or job.status == "running" %}
+          <form action="/jobs/{{ job.id }}/pause" method="post">
+            <button type="submit">{{ tr("Pause") }}</button>
+          </form>
+          {% endif %}
+          {% if job.status == "paused" %}
+          <form action="/jobs/{{ job.id }}/resume" method="post">
+            <button type="submit">{{ tr("Resume") }}</button>
+          </form>
+          {% endif %}
+          {% if job.status == "queued" or job.status == "paused" %}
+          <form action="/jobs/{{ job.id }}/queue/up" method="post">
+            <button type="submit">{{ tr("Up") }}</button>
+          </form>
+          <form action="/jobs/{{ job.id }}/queue/down" method="post">
+            <button type="submit">{{ tr("Down") }}</button>
+          </form>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state">{{ tr("No jobs match the current filters yet.") }}</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="ScanForge icon">
+  <defs>
+    <linearGradient id="bg" x1="12%" x2="88%" y1="10%" y2="92%">
+      <stop offset="0%" stop-color="#0f2532" />
+      <stop offset="52%" stop-color="#143b4a" />
+      <stop offset="100%" stop-color="#1e5b6e" />
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#89d2dc" stop-opacity=".28" />
+      <stop offset="100%" stop-color="#89d2dc" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="plate" x1="22%" x2="78%" y1="18%" y2="84%">
+      <stop offset="0%" stop-color="#f3f8fb" />
+      <stop offset="100%" stop-color="#c8d8e2" />
+    </linearGradient>
+    <linearGradient id="ring" x1="18%" x2="82%" y1="16%" y2="84%">
+      <stop offset="0%" stop-color="#8fe2e7" />
+      <stop offset="100%" stop-color="#3ba4ba" />
+    </linearGradient>
+    <linearGradient id="ember" x1="10%" x2="90%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffd08a" />
+      <stop offset="45%" stop-color="#f5a742" />
+      <stop offset="100%" stop-color="#e56b2f" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#07161f" flood-opacity=".32" />
+    </filter>
+    <clipPath id="frame">
+      <rect width="256" height="256" rx="54" />
+    </clipPath>
+  </defs>
+
+  <rect width="256" height="256" rx="54" fill="url(#bg)" />
+  <rect width="256" height="256" rx="54" fill="url(#glow)" />
+
+  <g clip-path="url(#frame)" opacity=".18">
+    <path d="M-10 182 114 58" stroke="#8edbe2" stroke-width="10" />
+    <path d="M34 226 158 102" stroke="#8edbe2" stroke-width="6" />
+    <path d="M126 266 250 142" stroke="#8edbe2" stroke-width="8" />
+    <path d="M0 78h256" stroke="#d4e9ee" stroke-width="2" />
+    <path d="M0 112h256" stroke="#d4e9ee" stroke-width="2" />
+    <path d="M0 146h256" stroke="#d4e9ee" stroke-width="2" />
+  </g>
+
+  <g filter="url(#shadow)">
+    <path
+      d="M128 34 73 56 45 112l18 63 65 47 65-47 18-63-28-56-55-22Z"
+      fill="url(#plate)"
+    />
+    <path
+      d="M128 51 84 69 61 115l15 51 52 38 52-38 15-51-23-46-44-18Z"
+      fill="#19404e"
+      opacity=".9"
+    />
+  </g>
+
+  <g>
+    <circle cx="118" cy="116" r="37" fill="none" stroke="url(#ring)" stroke-width="12" />
+    <circle cx="118" cy="116" r="19" fill="#dff7f7" opacity=".95" />
+    <path
+      d="M145 143 180 178"
+      fill="none"
+      stroke="#dff7f7"
+      stroke-linecap="round"
+      stroke-width="14"
+    />
+    <path
+      d="M145 143 180 178"
+      fill="none"
+      stroke="#0f2532"
+      stroke-linecap="round"
+      stroke-opacity=".2"
+      stroke-width="6"
+    />
+  </g>
+
+  <g>
+    <path
+      d="m144 72 11 17 20 6-14 13 1 20-18-10-18 10 1-20-14-13 20-6Z"
+      fill="url(#ember)"
+    />
+    <path
+      d="M95 170c12 8 29 11 44 7 11-2 21-8 30-18"
+      fill="none"
+      stroke="#ffd79f"
+      stroke-linecap="round"
+      stroke-width="8"
+    />
+    <path
+      d="M104 170c6-12 15-20 28-25"
+      fill="none"
+      stroke="#f2994a"
+      stroke-linecap="round"
+      stroke-width="6"
+    />
+  </g>
+</svg>

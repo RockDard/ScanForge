@@ -1,0 +1,38 @@
+<svg width="560" height="420" viewBox="0 0 560 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="560" height="420" rx="32" fill="url(#bg)"/>
+  <g opacity="0.22" stroke="#F7F2E8">
+    <path d="M40 86H520"/>
+    <path d="M40 146H520"/>
+    <path d="M40 206H520"/>
+    <path d="M40 266H520"/>
+    <path d="M40 326H520"/>
+    <path d="M100 36V384"/>
+    <path d="M180 36V384"/>
+    <path d="M260 36V384"/>
+    <path d="M340 36V384"/>
+    <path d="M420 36V384"/>
+  </g>
+  <rect x="58" y="56" width="444" height="112" rx="24" fill="#10253A" fill-opacity="0.78"/>
+  <rect x="58" y="190" width="212" height="170" rx="24" fill="#10253A" fill-opacity="0.68"/>
+  <rect x="288" y="190" width="214" height="170" rx="24" fill="#10253A" fill-opacity="0.68"/>
+  <path d="M92 136C116 114 137 118 159 124C182 130 198 145 224 142C246 140 257 124 274 104C292 83 315 74 351 88C387 102 394 136 431 144C448 147 462 145 474 138" stroke="#F4B368" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="160" cy="124" r="12" fill="#F4B368"/>
+  <circle cx="274" cy="104" r="12" fill="#7CD4C9"/>
+  <circle cx="431" cy="144" r="12" fill="#F7F2E8"/>
+  <path d="M100 320L142 284L181 302L224 244" stroke="#7CD4C9" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="100" cy="320" r="10" fill="#F7F2E8"/>
+  <circle cx="142" cy="284" r="10" fill="#F4B368"/>
+  <circle cx="181" cy="302" r="10" fill="#F7F2E8"/>
+  <circle cx="224" cy="244" r="10" fill="#7CD4C9"/>
+  <path d="M322 326C322 285.131 355.131 252 396 252V252C436.869 252 470 285.131 470 326V326" stroke="#F7F2E8" stroke-width="8" stroke-linecap="round"/>
+  <path d="M350 326C350 300.595 370.595 280 396 280V280C421.405 280 442 300.595 442 326V326" stroke="#7CD4C9" stroke-width="8" stroke-linecap="round"/>
+  <path d="M378 326C378 316.059 386.059 308 396 308V308C405.941 308 414 316.059 414 326V326" stroke="#F4B368" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="396" cy="326" r="12" fill="#F7F2E8"/>
+  <defs>
+    <linearGradient id="bg" x1="36" y1="28" x2="526" y2="395" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17304A"/>
+      <stop offset="0.55" stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#B76C43"/>
+    </linearGradient>
+  </defs>
+</svg>

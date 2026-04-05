@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% set title = "Rerun " + job.id %}
+{% set heading = "Choose Rerun Strategy" %}
+{% set page_class = "job-page" %}
+{% set lede = "This project has already been analyzed. Choose whether to focus on changed files or to rerun the full verification profile for the whole project." %}
+{% block content %}
+<main class="dashboard-layout">
+  <section class="panel panel-span-2">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Repeat submission") }}</p>
+        <h2>{{ job.name }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("Baseline job: {job_id}. Source: {source}.", job_id=baseline_job.id, source=job.original_filename) }}
+      </p>
+    </div>
+    <div class="preset-grid retest-grid">
+      <form class="preset-card retest-form-card" action="/jobs/{{ job.id }}/rerun" method="post">
+        <input type="hidden" name="retest_scope" value="changes_only">
+        <strong>{{ tr("Changes only") }}</strong>
+        <small>{{ tr("Compare with the previous run, focus checks on changed files, and build a delta-oriented report.") }}</small>
+        <button type="submit">{{ tr("Run focused retest") }}</button>
+      </form>
+      <form class="preset-card retest-form-card" action="/jobs/{{ job.id }}/rerun" method="post">
+        <input type="hidden" name="retest_scope" value="full_project">
+        <strong>{{ tr("Full project") }}</strong>
+        <small>{{ tr("Run the full verification profile again for the whole codebase, regardless of the detected diff.") }}</small>
+        <button type="submit">{{ tr("Run full retest") }}</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Baseline") }}</p>
+        <h2>{{ tr("Current run context") }}</h2>
+      </div>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span>{{ tr("Job") }}</span>
+        <strong>{{ job.id }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Mode") }}</span>
+        <strong>{{ label("mode", job.mode) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Preset") }}</span>
+        <strong>{{ label("preset", job.options.preset) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Checks") }}</span>
+        <strong>{{ job.options.enabled_checks(job.mode) | length }}</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel panel-span-2">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("History") }}</p>
+        <h2>{{ tr("Related runs") }}</h2>
+      </div>
+    </div>
+    {% if related_jobs %}
+    <div class="reference-list compact">
+      {% for related in related_jobs %}
+      <article class="reference-item">
+        <strong><a class="job-card-link" href="/jobs/{{ related.id }}">{{ related.id }}</a></strong>
+        <p>{{ related.name }}</p>
+        <small>{{ label("status", related.status) }} · {{ related.created_at }}</small>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state">{{ tr("No additional related runs were found in the portal history.") }}</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

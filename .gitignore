@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.log
+data/uploads/*
+data/jobs/*
+data/knowledge_base/*
+
+
+.ai
