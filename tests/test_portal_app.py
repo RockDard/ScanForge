@@ -96,6 +96,22 @@ class PortalAppTests(unittest.TestCase):
         self.assertEqual(jobs[1].queue_position, 2)
         self.assertEqual(self.start_background_job.call_count, 2)
 
+    def test_create_job_api_returns_redirect_payload(self):
+        response = self.client.post(
+            "/api/jobs/upload",
+            data={
+                "name": "API upload",
+                "mode": "full_scan",
+                "preset": "balanced",
+            },
+            files={"upload": ("widget.cpp", b"int main() { return 0; }\n", "text/plain")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["jobs"]), 1)
+        self.assertTrue(payload["redirect_url"].startswith("/jobs/"))
+
     def test_dashboard_filters_jobs(self):
         upload_path = self.uploads_dir / "sample.cpp"
         upload_path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,13 +156,68 @@ class PortalAppTests(unittest.TestCase):
         follow_up = self.client.get("/")
         self.assertEqual(follow_up.status_code, 200)
         self.assertIn("Создать задачу", follow_up.text)
+        self.assertIn("Анализатор проектов", response.text)
 
-    def test_dashboard_renders_knowledge_base_sync_button(self):
+    def test_dashboard_moves_system_controls_to_settings_page(self):
         response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('href="/settings"', response.text)
+        self.assertNotIn('action="/knowledge-base/sync"', response.text)
+        self.assertNotIn("Host toolchain", response.text)
+        self.assertNotIn("AI review backend", response.text)
+        self.assertNotIn("Local knowledge base", response.text)
+        self.assertNotIn("Host hardware", response.text)
+
+    def test_settings_page_renders_knowledge_base_sync_button(self):
+        response = self.client.get("/settings")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('action="/knowledge-base/sync"', response.text)
         self.assertIn("Sync now", response.text)
+        self.assertIn("Technical settings", response.text)
+
+    def test_settings_page_renders_tool_install_button_for_missing_tools(self):
+        fake_inventory = [
+            {
+                "key": "clang_tidy",
+                "label": "clang-tidy",
+                "path": None,
+                "installed": False,
+                "package_manager": "apt",
+                "packages": ["clang-tidy"],
+                "installable": True,
+                "description": "Static checks",
+            }
+        ]
+        with patch.object(app_module, "describe_toolchain", return_value=fake_inventory):
+            response = self.client.get("/settings")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('action="/tools/install/clang_tidy"', response.text)
+        self.assertIn("Install", response.text)
+
+    def test_settings_page_renders_system_sections(self):
+        response = self.client.get("/settings")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Host toolchain", response.text)
+        self.assertIn("AI review backend", response.text)
+        self.assertIn("Local knowledge base", response.text)
+        self.assertIn("Host hardware", response.text)
+        self.assertIn("PDF generation", response.text)
+
+    def test_tool_install_route_calls_backend_installer(self):
+        with patch.object(app_module, "install_host_tool", return_value={"ok": True, "status": "installed"}) as installer:
+            response = self.client.post(
+                "/tools/install/clang_tidy",
+                data={"next_url": "/"},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/")
+        installer.assert_called_once_with("clang_tidy")
 
     def test_manual_knowledge_base_sync_route_starts_background_sync(self):
         with patch.object(app_module, "start_background_knowledge_base_sync", return_value=True) as start_sync:
@@ -185,6 +256,18 @@ class PortalAppTests(unittest.TestCase):
         self.assertFalse(payload["started"])
         self.assertTrue(payload["knowledge_base"]["sync"]["running"])
         start_sync.assert_called_once_with(force=True)
+
+    def test_assistant_model_download_route_starts_background_download(self):
+        with patch.object(app_module, "start_local_model_download", return_value={"started": True}) as start_download:
+            response = self.client.post(
+                "/assistant/models/qwen2.5-coder-3b-instruct/download",
+                data={"next_url": "/"},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/")
+        start_download.assert_called_once_with("qwen2.5-coder-3b-instruct")
 
     def test_rerun_route_clones_job(self):
         upload_path = self.uploads_dir / "original.cpp"
@@ -298,6 +381,42 @@ class PortalAppTests(unittest.TestCase):
         self.assertIn("hardware", payload)
         self.assertIn("recommended_worker_processes", payload)
         self.assertIn("worker_mode", payload)
+        self.assertIn("tool_inventory", payload)
+
+    def test_dashboard_api_returns_filtered_jobs_and_overview(self):
+        upload_path = self.uploads_dir / "release.cpp"
+        upload_path.parent.mkdir(parents=True, exist_ok=True)
+        upload_path.write_text("int main() { return 0; }\n", encoding="utf-8")
+
+        release_job = app_module.create_job_record(
+            name="Release gate",
+            mode="full_scan",
+            original_name="release.cpp",
+            upload_path=upload_path,
+            options=JobOptions(preset="security", run_functionality=True, run_security=True, run_quality=True),
+        )
+        release_job.status = "completed"
+        self.store.save(release_job)
+
+        fuzz_job = app_module.create_job_record(
+            name="Fuzz pass",
+            mode="fuzz_project",
+            original_name="fuzz.zip",
+            upload_path=upload_path,
+            options=JobOptions(preset="fuzz", run_functionality=True, run_fuzzing=True),
+        )
+        fuzz_job.status = "running"
+        self.store.save(fuzz_job)
+
+        response = self.client.get("/api/dashboard?query=release&status=completed&preset=security")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["jobs"]), 1)
+        self.assertEqual(payload["jobs"][0]["name"], "Release gate")
+        self.assertEqual(payload["overview"]["completed_jobs"], 1)
+        self.assertEqual(payload["overview"]["running_jobs"], 0)
+        self.assertEqual(payload["all_jobs_count"], 2)
 
     def test_cancel_route_marks_queued_job_cancelled(self):
         response = self.client.post(
@@ -343,6 +462,49 @@ class PortalAppTests(unittest.TestCase):
         self.assertEqual(resumed.status, "queued")
         self.assertFalse(resumed.metadata.get("pause_requested"))
         self.assertEqual(self.start_background_job.call_count, 2)
+
+    def test_delete_route_removes_completed_job(self):
+        response = self.client.post(
+            "/jobs",
+            data={
+                "name": "Delete me",
+                "mode": "full_scan",
+                "preset": "balanced",
+            },
+            files={"upload": ("widget.cpp", b"int main() { return 0; }\n", "text/plain")},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        job = self.store.list()[0]
+        self.store.mutate(job.id, lambda current: setattr(current, "status", "completed"))
+
+        delete_response = self.client.post(
+            f"/jobs/{job.id}/delete",
+            data={"next_url": "/"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(delete_response.status_code, 303)
+        self.assertFalse(self.store.job_dir(job.id).exists())
+
+    def test_view_report_route_redirects_to_html_artifact(self):
+        upload_path = self.uploads_dir / "sample.cpp"
+        upload_path.parent.mkdir(parents=True, exist_ok=True)
+        upload_path.write_text("int main() { return 0; }\n", encoding="utf-8")
+        job = app_module.create_job_record(
+            name="Reported job",
+            mode="full_scan",
+            original_name="sample.cpp",
+            upload_path=upload_path,
+            options=JobOptions(preset="balanced"),
+        )
+        job.html_report = "report.html"
+        self.store.save(job)
+
+        response = self.client.get(f"/jobs/{job.id}/report", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], f"/jobs/{job.id}/artifacts/report.html")
 
     def test_queue_move_routes_reorder_jobs(self):
         created = []
@@ -415,6 +577,7 @@ class PortalAppTests(unittest.TestCase):
         self.assertIn('data-queue-list', dashboard.text)
         self.assertIn('data-queue-job-id=', dashboard.text)
         self.assertIn('Drag', dashboard.text)
+        self.assertIn("Delete", dashboard.text)
 
 
 if __name__ == "__main__":

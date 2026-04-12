@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .analysis import is_archive
-from .ai_review import ai_backend_status
+from .ai_review import ai_backend_status, start_local_model_download
 from .hardware import detect_host_hardware, recommended_worker_processes
 from .i18n import (
     DEFAULT_LANGUAGE,
@@ -34,7 +34,7 @@ from .config import AUTOSTART_WORKER, STATIC_DIR, TEMPLATES_DIR, UPLOAD_DIR
 from .models import JobOptions, JobRecord
 from .presets import list_presets, normalize_preset_name, preset_options
 from .storage import JobStore, default_steps
-from .tooling import detect_toolchain
+from .tooling import describe_toolchain, detect_toolchain, install_host_tool
 
 
 app = FastAPI(title="ScanForge", version="0.2.0")
@@ -43,6 +43,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 store = JobStore()
 
 
+# Блок локализации: определяем язык из query-параметра или cookie.
 def resolve_language(request: Request) -> str:
     requested = request.query_params.get("lang")
     if requested in SUPPORTED_LANGUAGES:
@@ -104,6 +105,7 @@ async def app_shutdown() -> None:
     stop_knowledge_base_scheduler()
 
 
+# Небольшие утилиты UI и очереди, которые переиспользуются в маршрутах и шаблонах.
 def worker_mode() -> str:
     return "autostart-subprocess" if AUTOSTART_WORKER else "external-worker"
 
@@ -207,8 +209,10 @@ def serialize_job(job: JobRecord, *, include_findings: bool = False) -> dict:
     payload = job.to_dict()
     payload["selected_checks"] = job.options.enabled_checks(job.mode)
     payload["report_preview_url"] = f"/jobs/{job.id}/artifacts/{job.html_report}" if job.html_report else None
+    payload["view_report_url"] = f"/jobs/{job.id}/report" if job.html_report else None
     payload["can_rerun"] = Path(job.upload_path).exists()
     payload["queue_controls_enabled"] = job.status in {"queued", "paused"}
+    payload["can_delete"] = job.status != "running"
     if include_findings:
         payload["sorted_findings"] = [finding.__dict__ for finding in sort_findings(job)]
     return payload
@@ -291,6 +295,12 @@ def build_job_options(
     return options
 
 
+def _job_redirect_url(created_jobs: list[JobRecord]) -> str:
+    if len(created_jobs) == 1:
+        return f"/jobs/{created_jobs[0].id}"
+    return "/"
+
+
 def create_job_record(
     *,
     name: str,
@@ -332,100 +342,23 @@ def create_job_record(
     return job
 
 
-def clone_job(
-    job: JobRecord,
+# Общий helper для HTML-формы и API-загрузки, чтобы не дублировать job-creation логику.
+async def create_jobs_from_uploads(
     *,
-    retest_scope: str = "full_project",
-    baseline_job: JobRecord | None = None,
-    ui_language: str | None = None,
-) -> JobRecord:
-    clone_options = JobOptions(**asdict(job.options))
-    clone_options.retest_scope = retest_scope  # type: ignore[assignment]
-    baseline = baseline_job or job
-    cloned = create_job_record(
-        name=f"{job.name} (rerun)",
-        mode=job.mode,
-        original_name=job.original_filename,
-        upload_path=Path(job.upload_path),
-        options=clone_options,
-        metadata={
-            "project_key": job.metadata.get("project_key", normalize_project_key(job.original_filename)),
-            "retest_scope": retest_scope,
-            "repeat_submission": True,
-            "baseline_job_id": baseline.id,
-            "baseline_job_name": baseline.name,
-            "baseline_created_at": baseline.created_at,
-            "ui_language": normalize_language(ui_language or str(job.metadata.get("ui_language", DEFAULT_LANGUAGE))),
-        },
-    )
-    cloned.metadata["rerun_of"] = job.id
-    return cloned
-
-
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/")
-async def index(
     request: Request,
-    query: str = "",
-    status: str = "all",
-    mode: str = "all",
-    preset: str = "all",
-):
-    language = resolve_language(request)
-    all_jobs = store.list()
-    jobs = filter_jobs(all_jobs, query=query, status=status, mode=mode, preset=preset)
-    tools = detect_toolchain()
-    ai_backend = ai_backend_status()
-    kb_status = knowledge_base_status()
-    hardware = detect_host_hardware()
-    known_repeat_projects = repeat_submission_catalog(all_jobs)
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        template_context(request, {
-            "jobs": jobs,
-            "queue_jobs": queue_ordered_jobs(jobs),
-            "all_jobs_count": len(all_jobs),
-            "modes": build_modes(language),
-            "overview": dashboard_overview(jobs),
-            "tools": tools,
-            "ai_backend": ai_backend,
-            "knowledge_base": kb_status,
-            "hardware": hardware.to_dict(),
-            "recommended_workers": recommended_worker_processes(hardware),
-            "worker_mode": worker_mode(),
-            "presets": list_presets(language),
-            "known_repeat_projects": known_repeat_projects,
-            "filters": {
-                "query": query,
-                "status": status,
-                "mode": mode,
-                "preset": preset,
-            },
-        }),
-    )
-
-
-@app.post("/jobs")
-async def create_job(
-    request: Request,
-    name: str = Form(""),
-    mode: str = Form(...),
-    preset: str = Form("balanced"),
-    retest_scope: str | None = Form(None),
-    run_functionality: str | None = Form(None),
-    run_security: str | None = Form(None),
-    run_style: str | None = Form(None),
-    run_quality: str | None = Form(None),
-    run_fuzzing: str | None = Form(None),
-    fuzz_duration_seconds: int = Form(60),
-    max_report_findings: int = Form(200),
-    upload: list[UploadFile] = File(...),
-):
+    name: str,
+    mode: str,
+    preset: str,
+    retest_scope: str | None,
+    run_functionality: str | None,
+    run_security: str | None,
+    run_style: str | None,
+    run_quality: str | None,
+    run_fuzzing: str | None,
+    fuzz_duration_seconds: int,
+    max_report_findings: int,
+    upload: list[UploadFile],
+) -> list[JobRecord]:
     if mode not in {"full_scan", "fuzz_single", "fuzz_project"}:
         raise HTTPException(status_code=400, detail="Unsupported job mode.")
 
@@ -496,10 +429,164 @@ async def create_job(
 
     for job in created_jobs:
         start_background_job(job.id)
+    return created_jobs
 
-    if len(created_jobs) == 1:
-        return RedirectResponse(url=f"/jobs/{created_jobs[0].id}", status_code=303)
-    return RedirectResponse(url="/", status_code=303)
+
+def clone_job(
+    job: JobRecord,
+    *,
+    retest_scope: str = "full_project",
+    baseline_job: JobRecord | None = None,
+    ui_language: str | None = None,
+) -> JobRecord:
+    clone_options = JobOptions(**asdict(job.options))
+    clone_options.retest_scope = retest_scope  # type: ignore[assignment]
+    baseline = baseline_job or job
+    cloned = create_job_record(
+        name=f"{job.name} (rerun)",
+        mode=job.mode,
+        original_name=job.original_filename,
+        upload_path=Path(job.upload_path),
+        options=clone_options,
+        metadata={
+            "project_key": job.metadata.get("project_key", normalize_project_key(job.original_filename)),
+            "retest_scope": retest_scope,
+            "repeat_submission": True,
+            "baseline_job_id": baseline.id,
+            "baseline_job_name": baseline.name,
+            "baseline_created_at": baseline.created_at,
+            "ui_language": normalize_language(ui_language or str(job.metadata.get("ui_language", DEFAULT_LANGUAGE))),
+        },
+    )
+    cloned.metadata["rerun_of"] = job.id
+    return cloned
+
+
+# Блок HTTP-маршрутов: от дашборда и загрузки до управления артефактами.
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/")
+async def index(
+    request: Request,
+    query: str = "",
+    status: str = "all",
+    mode: str = "all",
+    preset: str = "all",
+):
+    language = resolve_language(request)
+    all_jobs = store.list()
+    jobs = filter_jobs(all_jobs, query=query, status=status, mode=mode, preset=preset)
+    known_repeat_projects = repeat_submission_catalog(all_jobs)
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        template_context(request, {
+            "jobs": jobs,
+            "queue_jobs": queue_ordered_jobs(jobs),
+            "all_jobs_count": len(all_jobs),
+            "modes": build_modes(language),
+            "overview": dashboard_overview(jobs),
+            "presets": list_presets(language),
+            "known_repeat_projects": known_repeat_projects,
+            "filters": {
+                "query": query,
+                "status": status,
+                "mode": mode,
+                "preset": preset,
+            },
+        }),
+    )
+
+
+@app.get("/settings")
+async def settings_page(request: Request):
+    hardware = detect_host_hardware()
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        template_context(request, {
+            "tool_inventory": describe_toolchain(),
+            "ai_backend": ai_backend_status(),
+            "knowledge_base": knowledge_base_status(),
+            "hardware": hardware.to_dict(),
+            "recommended_workers": recommended_worker_processes(hardware),
+            "worker_mode": worker_mode(),
+        }),
+    )
+
+
+@app.post("/jobs")
+async def create_job(
+    request: Request,
+    name: str = Form(""),
+    mode: str = Form(...),
+    preset: str = Form("balanced"),
+    retest_scope: str | None = Form(None),
+    run_functionality: str | None = Form(None),
+    run_security: str | None = Form(None),
+    run_style: str | None = Form(None),
+    run_quality: str | None = Form(None),
+    run_fuzzing: str | None = Form(None),
+    fuzz_duration_seconds: int = Form(60),
+    max_report_findings: int = Form(200),
+    upload: list[UploadFile] = File(...),
+):
+    created_jobs = await create_jobs_from_uploads(
+        request=request,
+        name=name,
+        mode=mode,
+        preset=preset,
+        retest_scope=retest_scope,
+        run_functionality=run_functionality,
+        run_security=run_security,
+        run_style=run_style,
+        run_quality=run_quality,
+        run_fuzzing=run_fuzzing,
+        fuzz_duration_seconds=fuzz_duration_seconds,
+        max_report_findings=max_report_findings,
+        upload=upload,
+    )
+    return RedirectResponse(url=_job_redirect_url(created_jobs), status_code=303)
+
+
+@app.post("/api/jobs/upload")
+async def create_job_api(
+    request: Request,
+    name: str = Form(""),
+    mode: str = Form(...),
+    preset: str = Form("balanced"),
+    retest_scope: str | None = Form(None),
+    run_functionality: str | None = Form(None),
+    run_security: str | None = Form(None),
+    run_style: str | None = Form(None),
+    run_quality: str | None = Form(None),
+    run_fuzzing: str | None = Form(None),
+    fuzz_duration_seconds: int = Form(60),
+    max_report_findings: int = Form(200),
+    upload: list[UploadFile] = File(...),
+):
+    created_jobs = await create_jobs_from_uploads(
+        request=request,
+        name=name,
+        mode=mode,
+        preset=preset,
+        retest_scope=retest_scope,
+        run_functionality=run_functionality,
+        run_security=run_security,
+        run_style=run_style,
+        run_quality=run_quality,
+        run_fuzzing=run_fuzzing,
+        fuzz_duration_seconds=fuzz_duration_seconds,
+        max_report_findings=max_report_findings,
+        upload=upload,
+    )
+    return {
+        "jobs": [serialize_job(job) for job in created_jobs],
+        "redirect_url": _job_redirect_url(created_jobs),
+    }
 
 
 @app.get("/jobs/{job_id}/rerun")
@@ -565,6 +652,7 @@ async def job_detail(request: Request, job_id: str):
             "selected_checks": job.options.enabled_checks(job.mode),
             "ai_backend": ai_backend_status(),
             "worker_mode": worker_mode(),
+            "tool_inventory": describe_toolchain(),
             "queue_jobs": queue_ordered_jobs(store.list()),
             "related_jobs": related_jobs_for_project(
                 job.metadata.get("project_key", normalize_project_key(job.original_filename)),
@@ -593,9 +681,43 @@ async def jobs_api(
     return [serialize_job(job) for job in jobs]
 
 
+@app.get("/api/dashboard")
+async def dashboard_api(
+    query: str = "",
+    status: str = "all",
+    mode: str = "all",
+    preset: str = "all",
+):
+    all_jobs = store.list()
+    jobs = filter_jobs(all_jobs, query=query, status=status, mode=mode, preset=preset)
+    return {
+        "jobs": [serialize_job(job) for job in queue_ordered_jobs(jobs)],
+        "overview": dashboard_overview(jobs),
+        "all_jobs_count": len(all_jobs),
+        "tool_inventory": describe_toolchain(),
+        "ai_backend": ai_backend_status(),
+        "knowledge_base": knowledge_base_status(),
+        "worker_mode": worker_mode(),
+    }
+
+
 @app.get("/api/tools")
 async def tools_api():
-    return detect_toolchain()
+    return {
+        "paths": detect_toolchain(),
+        "inventory": describe_toolchain(),
+    }
+
+
+@app.post("/api/tools/install/{tool_key}")
+async def install_tool_api(tool_key: str):
+    return install_host_tool(tool_key)
+
+
+@app.post("/tools/install/{tool_key}")
+async def install_tool_web(tool_key: str, next_url: str = Form("/")):
+    install_host_tool(tool_key)
+    return RedirectResponse(url=sanitize_return_path(next_url), status_code=303)
 
 
 @app.get("/api/knowledge-base")
@@ -618,11 +740,23 @@ async def knowledge_base_sync_now_api():
     }
 
 
+@app.post("/assistant/models/{model_id}/download")
+async def assistant_model_download(model_id: str, next_url: str = Form("/")):
+    start_local_model_download(model_id)
+    return RedirectResponse(url=sanitize_return_path(next_url), status_code=303)
+
+
+@app.post("/api/assistant/models/{model_id}/download")
+async def assistant_model_download_api(model_id: str):
+    return start_local_model_download(model_id)
+
+
 @app.get("/api/system")
 async def system_api():
     hardware = detect_host_hardware()
     return {
         "tools": detect_toolchain(),
+        "tool_inventory": describe_toolchain(),
         "ai_backend": ai_backend_status(),
         "knowledge_base": knowledge_base_status(),
         "hardware": hardware.to_dict(),
@@ -644,6 +778,37 @@ async def cancel_job(job_id: str):
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
 
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_job_api(job_id: str):
+    try:
+        job = store.request_cancel(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found.") from exc
+    return serialize_job(job)
+
+
+@app.post("/jobs/{job_id}/delete")
+async def delete_job(job_id: str, next_url: str = Form("/")):
+    try:
+        store.delete(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=sanitize_return_path(next_url), status_code=303)
+
+
+@app.post("/api/jobs/{job_id}/delete")
+async def delete_job_api(job_id: str):
+    try:
+        store.delete(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"deleted": True, "job_id": job_id}
+
+
 @app.post("/jobs/{job_id}/pause")
 async def pause_job(job_id: str):
     try:
@@ -651,6 +816,16 @@ async def pause_job(job_id: str):
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Job not found.") from exc
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+
+@app.post("/api/jobs/{job_id}/pause")
+async def pause_job_api(job_id: str):
+    try:
+        store.request_pause(job_id)
+        job = store.load(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found.") from exc
+    return serialize_job(job)
 
 
 @app.post("/jobs/{job_id}/resume")
@@ -664,6 +839,17 @@ async def resume_job(job_id: str):
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
 
+@app.post("/api/jobs/{job_id}/resume")
+async def resume_job_api(job_id: str):
+    try:
+        job = store.resume_job(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found.") from exc
+    if job.status == "queued":
+        start_background_job(job.id)
+    return serialize_job(job)
+
+
 @app.post("/jobs/{job_id}/queue/up")
 async def move_job_up(job_id: str):
     try:
@@ -673,6 +859,15 @@ async def move_job_up(job_id: str):
     return RedirectResponse(url="/", status_code=303)
 
 
+@app.post("/api/jobs/{job_id}/queue/up")
+async def move_job_up_api(job_id: str):
+    try:
+        job = store.move_in_queue(job_id, -1)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found or not movable in queue.") from exc
+    return serialize_job(job)
+
+
 @app.post("/jobs/{job_id}/queue/down")
 async def move_job_down(job_id: str):
     try:
@@ -680,6 +875,15 @@ async def move_job_down(job_id: str):
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Job not found or not movable in queue.") from exc
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/api/jobs/{job_id}/queue/down")
+async def move_job_down_api(job_id: str):
+    try:
+        job = store.move_in_queue(job_id, 1)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found or not movable in queue.") from exc
+    return serialize_job(job)
 
 
 @app.post("/api/jobs/{job_id}/queue/reposition")
@@ -695,6 +899,17 @@ async def reposition_job_in_queue(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Job not found or not movable in queue.") from exc
     return serialize_job(job)
+
+
+@app.get("/jobs/{job_id}/report")
+async def view_job_report(job_id: str):
+    try:
+        job = store.load(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found.") from exc
+    if not job.html_report:
+        return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+    return RedirectResponse(url=f"/jobs/{job_id}/artifacts/{job.html_report}", status_code=303)
 
 
 @app.get("/jobs/{job_id}/artifacts/{filename}")

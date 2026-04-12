@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -211,6 +212,21 @@ class JobStore:
             self.mutate(current_id, lambda job, pos=index: setattr(job, "queue_position", pos))
         self.normalize_queue()
         return self.load(job_id)
+
+    # Удаляем задачу вместе с локальными артефактами, если она уже не исполняется.
+    def delete(self, job_id: str, *, remove_upload: bool = True) -> JobRecord:
+        with self._lock:
+            with self._job_lock(job_id):
+                job = self._load_unlocked(job_id)
+                if job.status == "running":
+                    raise RuntimeError("Running jobs must be stopped before deletion.")
+                upload_path = Path(job.upload_path)
+                job_dir = self.job_dir(job_id)
+                if remove_upload and upload_path.exists() and upload_path.is_file():
+                    upload_path.unlink(missing_ok=True)
+                shutil.rmtree(job_dir, ignore_errors=True)
+            self.normalize_queue()
+            return job
 
 
 class JobContext:

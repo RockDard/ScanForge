@@ -89,6 +89,7 @@
     <div class="card"><strong>{{ tr("Source") }}</strong><br>{{ report.ai_review.source }}</div>
     <div class="card"><strong>{{ tr("Decision") }}</strong><br>{{ report.ai_review.release_decision }}</div>
     <div class="card"><strong>{{ tr("Confidence") }}</strong><br>{{ report.ai_review.confidence }}</div>
+    <div class="card"><strong>{{ tr("Model") }}</strong><br>{{ report.ai_review.model }}</div>
   </div>
   <div class="actions">
     <div class="card">
@@ -125,7 +126,19 @@
     <div class="card"><strong>{{ tr("Build systems") }}</strong><br>{{ report.project.build_systems | join(", ") or tr("none") }}</div>
     <div class="card"><strong>{{ tr("Qt markers") }}</strong><br>{{ tr("yes" if report.project.is_qt_project else "no") }}</div>
     <div class="card"><strong>{{ tr("Tests detected") }}</strong><br>{{ tr("yes" if report.project.has_tests else "no") }}</div>
+    <div class="card"><strong>{{ tr("Programming languages") }}</strong><br>{{ report.project.programming_languages | join(", ") or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Polyglot") }}</strong><br>{{ tr("yes" if report.project.polyglot else "no") }}</div>
   </div>
+  {% if report.project.multilinguality and report.project.multilinguality.notes %}
+  <div class="references">
+    {% for note in report.project.multilinguality.notes %}
+    <div class="reference-card">
+      <strong>{{ tr("Multilinguality") }}</strong>
+      <div>{{ note }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   {% if report.comparison %}
   <h2>{{ tr("Retest baseline") }}</h2>

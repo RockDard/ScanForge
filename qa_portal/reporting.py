@@ -88,8 +88,19 @@ def build_pdf_report(report_data: dict, output_path: Path) -> None:
         f"{translate(language, 'Build systems')}: {', '.join(project.get('build_systems', [])) or translate(language, 'none')}",
         gap=6,
     )
+    write_line(
+        f"{translate(language, 'Programming languages')}: "
+        f"{', '.join(project.get('programming_languages', [])) or translate(language, 'none')}",
+        gap=6,
+    )
+    write_line(
+        f"{translate(language, 'Polyglot')}: {translate(language, 'yes' if project.get('polyglot') else 'no')}",
+        gap=6,
+    )
     write_line(f"{translate(language, 'Qt project: {value}', value=translate(language, 'yes' if project.get('is_qt_project') else 'no'))}", gap=6)
     write_line(f"{translate(language, 'Tests detected')}: {translate(language, 'yes' if project.get('has_tests') else 'no')}", gap=6)
+    for note in (project.get("multilinguality") or {}).get("notes", [])[:4]:
+        write_line(f"{translate(language, 'Multilinguality')}: {note}", size=10, gap=5)
     pdf.ln(2)
 
     comparison = report_data.get("comparison") or {}

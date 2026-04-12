@@ -26,6 +26,19 @@
       .replace(/'/g, "&#39;");
   }
 
+  function formatBytes(bytes) {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value) || value <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    let size = value;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex += 1;
+    }
+    return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+  }
+
   function normalizeProjectKey(filename) {
     const normalized = String(filename || "").trim().toLowerCase();
     const suffixes = [".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".zip", ".tar", ".gz", ".bz2", ".xz"];
@@ -69,8 +82,34 @@
       .join("");
   }
 
+  function queueStatusRank(status) {
+    const order = {
+      running: 0,
+      queued: 1,
+      paused: 2,
+      failed: 3,
+      completed: 4,
+      cancelled: 5,
+    };
+    return Object.prototype.hasOwnProperty.call(order, status) ? order[status] : 99;
+  }
+
+  function sortQueueJobs(jobs) {
+    return [...(jobs || [])].sort(function (left, right) {
+      const statusDiff = queueStatusRank(left.status) - queueStatusRank(right.status);
+      if (statusDiff !== 0) return statusDiff;
+      const leftPosition = Number(left.queue_position || 0) > 0 ? Number(left.queue_position) : Number.MAX_SAFE_INTEGER;
+      const rightPosition = Number(right.queue_position || 0) > 0 ? Number(right.queue_position) : Number.MAX_SAFE_INTEGER;
+      if (leftPosition !== rightPosition) return leftPosition - rightPosition;
+      return String(left.created_at || "").localeCompare(String(right.created_at || ""));
+    });
+  }
+
   function renderArtifactButtons(job) {
     const buttons = [];
+    if (job.view_report_url) {
+      buttons.push(`<a class="button-secondary" href="${escapeHtml(job.view_report_url)}">${escapeHtml(t("View report"))}</a>`);
+    }
     if (job.html_report) {
       buttons.push(`<a class="button-secondary" href="/jobs/${job.id}/artifacts/${encodeURIComponent(job.html_report)}">${escapeHtml(t("HTML report"))}</a>`);
     }
@@ -103,6 +142,11 @@
     if (job.status === "queued" || job.status === "running") {
       buttons.push(
         `<form action="/jobs/${job.id}/cancel" method="post"><button type="submit">${escapeHtml(t("Cancel"))}</button></form>`
+      );
+    }
+    if (job.can_delete) {
+      buttons.push(
+        `<form action="/jobs/${job.id}/delete" method="post"><input type="hidden" name="next_url" value="/"><button type="submit">${escapeHtml(t("Delete"))}</button></form>`
       );
     }
     buttons.push(`<a class="button-secondary" href="/jobs/${job.id}/rerun">${escapeHtml(t("Rerun"))}</a>`);
@@ -166,7 +210,7 @@
       .join("");
   }
 
-  function renderKnowledgeBaseSummary(job) {
+  function renderJobKnowledgeBaseSummary(job) {
     const kb = job.metadata?.knowledge_base || {};
     return `
       <div class="summary-card">
@@ -376,7 +420,7 @@
               <span class="${statusClass(step.status)}">${escapeHtml(valueLabel("status", step.status))}</span>
             </div>
             <div class="progress-track">
-              <div class="progress-bar" style="width: ${Number(step.progress || 0)}%"></div>
+              <div class="progress-bar ${step.status === "running" ? "progress-bar-active" : ""}" style="width: ${Number(step.progress || 0)}%"></div>
             </div>
             <small>${escapeHtml(t(step.message || "Waiting"))}</small>
           </div>
@@ -450,10 +494,557 @@
     return `<iframe class="report-frame" src="${escapeHtml(job.report_preview_url)}" title="${escapeHtml(t("HTML preview"))}"></iframe>`;
   }
 
+  function currentSearchParams() {
+    return new URLSearchParams(window.location.search);
+  }
+
+  function renderDashboardActionForm(actionUrl, apiUrl, labelText, hiddenInputs = "") {
+    return `
+      <form action="${escapeHtml(actionUrl)}" method="post" data-dashboard-action data-api-endpoint="${escapeHtml(apiUrl)}">
+        ${hiddenInputs}
+        <button type="submit">${escapeHtml(labelText)}</button>
+      </form>
+    `;
+  }
+
+  function renderSettingsActionForm(actionUrl, apiUrl, labelText, hiddenInputs = "", buttonClass = "button-secondary") {
+    return `
+      <form action="${escapeHtml(actionUrl)}" method="post" data-settings-action data-api-endpoint="${escapeHtml(apiUrl)}">
+        ${hiddenInputs}
+        <button type="submit" class="${escapeHtml(buttonClass)}">${escapeHtml(labelText)}</button>
+      </form>
+    `;
+  }
+
+  function renderDashboardJobCard(job) {
+    const queueMovable = job.status === "queued" || job.status === "paused";
+    const queueControls = [];
+    if (job.html_report) {
+      queueControls.push(`<a class="button-secondary" href="/jobs/${job.id}/report">${escapeHtml(t("View report"))}</a>`);
+    }
+    if (job.status === "queued" || job.status === "running") {
+      queueControls.push(renderDashboardActionForm(`/jobs/${job.id}/pause`, `/api/jobs/${job.id}/pause`, t("Pause")));
+    }
+    if (job.status === "paused") {
+      queueControls.push(renderDashboardActionForm(`/jobs/${job.id}/resume`, `/api/jobs/${job.id}/resume`, t("Resume")));
+    }
+    if (queueMovable) {
+      queueControls.push(renderDashboardActionForm(`/jobs/${job.id}/queue/up`, `/api/jobs/${job.id}/queue/up`, t("Up")));
+      queueControls.push(renderDashboardActionForm(`/jobs/${job.id}/queue/down`, `/api/jobs/${job.id}/queue/down`, t("Down")));
+    }
+    if (job.status !== "running") {
+      queueControls.push(
+        renderDashboardActionForm(
+          `/jobs/${job.id}/delete`,
+          `/api/jobs/${job.id}/delete`,
+          t("Delete"),
+          '<input type="hidden" name="next_url" value="/">'
+        )
+      );
+    }
+    return `
+      <article
+        class="job-card ${queueMovable ? "queue-draggable" : ""}"
+        data-queue-job-id="${escapeHtml(job.id)}"
+        data-queue-movable="${queueMovable ? "true" : "false"}"
+        data-queue-position="${escapeHtml(job.queue_position || 0)}"
+        draggable="${queueMovable ? "true" : "false"}"
+      >
+        <div class="job-card-top">
+          <strong>
+            <a class="job-card-link" href="/jobs/${job.id}">${escapeHtml(job.name)}</a>
+            ${queueMovable ? `<span class="drag-handle" aria-hidden="true">${escapeHtml(t("Drag"))}</span>` : ""}
+          </strong>
+          <span class="${statusClass(job.status)}">${escapeHtml(valueLabel("status", job.status))}</span>
+        </div>
+        <p>${escapeHtml(job.original_filename || "")}</p>
+        <p class="queue-meta">${escapeHtml(t("Queue #{position}", { position: job.queue_position || 0 }))}</p>
+        <div class="tag-row">
+          <span class="tag tag-soft">${escapeHtml(valueLabel("preset", job.options?.preset || "balanced"))}</span>
+          ${job.metadata?.repeat_submission ? `<span class="tag tag-soft">${escapeHtml(job.options?.retest_scope === "changes_only" ? valueLabel("retest_scope", "changes_only") : t("full retest"))}</span>` : ""}
+          ${(job.metadata?.project?.programming_languages || []).slice(0, 3).map((language) => `<span class="tag tag-soft">${escapeHtml(language)}</span>`).join("")}
+          ${enabledChecks(job).map((check) => `<span class="tag">${escapeHtml(valueLabel("check", check))}</span>`).join("")}
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar ${job.status === "running" ? "progress-bar-active" : ""}" style="width: ${Number(job.progress || 0)}%"></div>
+        </div>
+        <div class="job-card-foot">
+          <small>${escapeHtml(t(job.current_step || "Queued"))}</small>
+          <small>${escapeHtml(`${Number(job.progress || 0)}%`)}</small>
+        </div>
+        <div class="queue-controls">
+          ${queueControls.join("")}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderQueueList(jobs) {
+    const orderedJobs = sortQueueJobs(jobs);
+    if (!orderedJobs.length) {
+      return `<p class="empty-state">${escapeHtml(t("No jobs match the current filters yet."))}</p>`;
+    }
+    return `<div class="job-list" data-queue-list>${orderedJobs.map(renderDashboardJobCard).join("")}</div>`;
+  }
+
+  function renderToolInventory(inventory) {
+    return (inventory || [])
+      .map(function (tool) {
+        if (tool.installed) {
+          return `
+            <div class="tool-row">
+              <div class="tool-main">
+                <code>${escapeHtml(tool.key)}</code>
+                <small>${escapeHtml(tool.description || "")}</small>
+              </div>
+              <div class="tool-actions">
+                <span class="status status-completed">${escapeHtml(tool.path || "")}</span>
+              </div>
+            </div>
+          `;
+        }
+        const installForm = tool.installable
+          ? renderSettingsActionForm(
+              `/tools/install/${tool.key}`,
+              `/api/tools/install/${tool.key}`,
+              t("Install"),
+              `<input type="hidden" name="next_url" value="${escapeHtml(window.location.pathname + window.location.search)}">`
+            ).replace("<form ", '<form class="tool-install-form" ')
+          : "";
+        return `
+          <div class="tool-row tool-row-missing">
+            <div class="tool-main">
+              <code>${escapeHtml(tool.key)}</code>
+              <small>${escapeHtml(tool.description || "")}</small>
+            </div>
+            <div class="tool-actions">
+              <div class="tool-install-slot">
+                <span class="status status-skipped">${escapeHtml(t("not installed"))}</span>
+                ${installForm}
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function aiCopyText(aiBackend) {
+    if (aiBackend?.configured) {
+      return t("Remote AI review is configured and will augment the scan reports.");
+    }
+    if (aiBackend?.mode === "local-llm") {
+      return t("A downloaded local model is ready and will be used for AI-assisted review.");
+    }
+    return t("Remote AI review is not configured, so the portal will generate a deterministic local review instead.");
+  }
+
+  function renderAiSummary(aiBackend, workerMode) {
+    const installedCount = (aiBackend?.local_models || []).filter((item) => item.installed).length;
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Mode"))}</span>
+        <strong>${escapeHtml(aiBackend?.mode || "local-fallback")}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Worker mode"))}</span>
+        <strong>${escapeHtml(workerMode || "unknown")}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Provider"))}</span>
+        <strong>${escapeHtml(aiBackend?.provider || "scanforge-local")}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Model"))}</span>
+        <strong>${escapeHtml(aiBackend?.model || "")}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Status"))}</span>
+        <strong>${escapeHtml(t(aiBackend?.configured ? "ready" : "fallback"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Local runner"))}</span>
+        <strong>${escapeHtml(t(aiBackend?.local_runner?.available ? "ready" : "not installed"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Local models"))}</span>
+        <strong>${escapeHtml(installedCount)}</strong>
+      </div>
+    `;
+  }
+
+  function renderModelDownloadState(model) {
+    const state = model.download_state || {};
+    if (model.installed) {
+      return `<span class="tag">${escapeHtml(t("Installed"))}</span>`;
+    }
+    if (state.running) {
+      const progress = Math.max(0, Math.min(100, Number(state.progress_percent || 0)));
+      let meta = t("Preparing download...");
+      if (Number(state.total_bytes || 0) > 0) {
+        meta = t("Downloaded {loaded} of {total}.", {
+          loaded: formatBytes(state.downloaded_bytes || 0),
+          total: formatBytes(state.total_bytes || 0),
+        });
+      } else if (Number(state.downloaded_bytes || 0) > 0) {
+        meta = t("Downloaded {loaded}.", { loaded: formatBytes(state.downloaded_bytes || 0) });
+      }
+      return `
+        <span class="tag tag-soft">${escapeHtml(t("Downloading"))}</span>
+        <div class="download-progress">
+          <div class="progress-track compact">
+            <div class="progress-bar progress-bar-active" style="width: ${progress}%"></div>
+          </div>
+          <small class="download-progress-meta">${escapeHtml(meta)}</small>
+        </div>
+      `;
+    }
+    const retryNotice = state.error
+      ? `<small class="download-progress-meta">${escapeHtml(t("Download failed: {error}", { error: state.error }))}</small>`
+      : "";
+    return `
+      ${retryNotice}
+      ${renderSettingsActionForm(
+        `/assistant/models/${model.id}/download`,
+        `/api/assistant/models/${model.id}/download`,
+        t("Download"),
+        `<input type="hidden" name="next_url" value="${escapeHtml(window.location.pathname + window.location.search)}">`
+      )}
+    `;
+  }
+
+  function renderAiModelList(aiBackend) {
+    const defaultCard = `
+      <article class="reference-item">
+        <strong>${escapeHtml(aiBackend.default_model?.label || "ScanForge Local Analyst")}</strong>
+        <p>${escapeHtml(t("Default assistant model"))}</p>
+        <small>${escapeHtml(aiBackend.default_model?.description || "")}</small>
+      </article>
+    `;
+    const localModels = (aiBackend.local_models || []).map(function (model) {
+      return `
+        <article class="reference-item">
+          <strong>${escapeHtml(model.label)}</strong>
+          <p>${escapeHtml(model.description || "")}</p>
+          <small>
+            ${escapeHtml(t("Role"))}: ${escapeHtml(model.role || "")}
+            ${model.size_hint_gb ? ` · ~${escapeHtml(model.size_hint_gb)} GB` : ""}
+          </small>
+          <div class="reference-actions">
+            ${renderModelDownloadState(model)}
+          </div>
+        </article>
+      `;
+    }).join("");
+    return `${defaultCard}${localModels}`;
+  }
+
+  function renderSystemKnowledgeBaseSummary(kb) {
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Status"))}</span>
+        <strong>${escapeHtml(t(kb.available ? "ready" : "empty"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Sources"))}</span>
+        <strong>${escapeHtml(kb.successful_sources || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Updated"))}</span>
+        <strong>${escapeHtml(kb.updated_at || t("pending"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Stale"))}</span>
+        <strong>${escapeHtml(t(kb.stale ? "yes" : "no"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Weekly sync"))}</span>
+        <strong>${escapeHtml(t(kb.weekly_schedule?.enabled ? "on" : "off"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("NVD yearly"))}</span>
+        <strong>${escapeHtml(kb.nvd_yearly?.enabled ? kb.nvd_yearly.year_count : 0)}</strong>
+      </div>
+    `;
+  }
+
+  function renderKnowledgeBaseScheduleCopy(kb) {
+    const parts = [];
+    if (kb.weekly_schedule?.enabled) {
+      parts.push(
+        t("Weekly sync is scheduled for {day} at {time}.", {
+          day: t(kb.weekly_schedule.day_label),
+          time: `${String(kb.weekly_schedule.hour).padStart(2, "0")}:${String(kb.weekly_schedule.minute).padStart(2, "0")}`,
+        })
+      );
+    } else {
+      parts.push(t("Weekly sync is disabled."));
+    }
+    if (kb.nvd_yearly?.enabled) {
+      parts.push(
+        t("The portal is configured to maintain an NVD yearly mirror from {year_start} to {year_end}.", {
+          year_start: kb.nvd_yearly.year_start,
+          year_end: kb.nvd_yearly.year_end,
+        })
+      );
+    }
+    return parts.join(" ");
+  }
+
+  function renderKnowledgeBaseSources(kb) {
+    if (!(kb.sources_list || []).length) {
+      return `<p class="empty-state">${escapeHtml(t("Knowledge base sync has not been run yet."))}</p>`;
+    }
+    return (kb.sources_list || [])
+      .map(function (source) {
+        return `
+          <article class="reference-item">
+            <strong>${escapeHtml(source.label)}</strong>
+            <small>
+              ${escapeHtml(source.status || "")}${source.count ? ` · ${escapeHtml(source.count)}` : ""}
+              ${source.year_start && source.year_end ? ` · ${escapeHtml(source.year_start)}-${escapeHtml(source.year_end)}` : ""}
+            </small>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderHardwareSummary(system) {
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("CPU target"))}</span>
+        <strong>${escapeHtml(system.hardware.cpu_threads_target || 0)}/${escapeHtml(system.hardware.cpu_threads_total || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("RAM target"))}</span>
+        <strong>${escapeHtml(system.hardware.memory_target_mb || 0)} MB</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("GPUs"))}</span>
+        <strong>${escapeHtml(system.hardware.gpu_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Recommended workers"))}</span>
+        <strong>${escapeHtml(system.recommended_worker_processes || 0)}</strong>
+      </div>
+    `;
+  }
+
+  function renderHardwareGpuList(system) {
+    const gpus = system.hardware?.gpus || [];
+    if (!gpus.length) {
+      return `<p class="empty-state">${escapeHtml(t("No NVIDIA GPUs were detected, so the portal will run in CPU/RAM adaptive mode."))}</p>`;
+    }
+    return gpus
+      .map(function (gpu) {
+        return `
+          <article class="reference-item">
+            <strong>GPU ${escapeHtml(gpu.index)}</strong>
+            <p>${escapeHtml(gpu.name || "Unknown GPU")}</p>
+            <small>${escapeHtml(gpu.memory_total_mb || 0)} MB${gpu.utilization_percent !== null && gpu.utilization_percent !== undefined ? ` · ${escapeHtml(gpu.utilization_percent)}% util` : ""}</small>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  async function fetchJson(url) {
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async function fetchDashboardState() {
+    const query = currentSearchParams().toString();
+    return fetchJson(query ? `/api/dashboard?${query}` : "/api/dashboard");
+  }
+
+  async function fetchSettingsState() {
+    return fetchJson("/api/system");
+  }
+
+  function updateDashboardPage(root, payload) {
+    for (const [key, value] of Object.entries(payload.overview || {})) {
+      const target = root.querySelector(`[data-overview-key="${key}"]`);
+      if (target) target.textContent = String(value);
+    }
+
+    const historyCopy = root.querySelector("[data-history-copy]");
+    if (historyCopy) {
+      historyCopy.textContent = t("Showing {visible} of {total} saved jobs.", {
+        visible: (payload.jobs || []).length,
+        total: payload.all_jobs_count || 0,
+      });
+    }
+
+    const queueContainer = root.querySelector("[data-queue-container]");
+    if (queueContainer) {
+      queueContainer.innerHTML = renderQueueList(payload.jobs || []);
+      const queueList = queueContainer.querySelector("[data-queue-list]");
+      if (queueList) initQueueDragAndDrop(queueList);
+    }
+  }
+
+  function updateSettingsPage(root, payload) {
+    const toolList = root.querySelector("[data-tool-list]");
+    if (toolList) toolList.innerHTML = renderToolInventory(payload.tool_inventory || []);
+
+    const aiSummary = root.querySelector("[data-ai-summary]");
+    if (aiSummary) aiSummary.innerHTML = renderAiSummary(payload.ai_backend || {}, payload.worker_mode || "");
+
+    const aiCopy = root.querySelector("[data-ai-copy]");
+    if (aiCopy) aiCopy.textContent = aiCopyText(payload.ai_backend || {});
+
+    const aiModels = root.querySelector("[data-ai-model-list]");
+    if (aiModels) aiModels.innerHTML = renderAiModelList(payload.ai_backend || { default_model: {}, local_models: [] });
+
+    const kbSummary = root.querySelector("[data-kb-summary]");
+    if (kbSummary) kbSummary.innerHTML = renderSystemKnowledgeBaseSummary(payload.knowledge_base || {});
+
+    const kbScheduleCopy = root.querySelector("[data-kb-schedule-copy]");
+    if (kbScheduleCopy) kbScheduleCopy.textContent = renderKnowledgeBaseScheduleCopy(payload.knowledge_base || {});
+
+    const kbSources = root.querySelector("[data-kb-sources]");
+    if (kbSources) kbSources.innerHTML = renderKnowledgeBaseSources(payload.knowledge_base || {});
+
+    const kbNotice = root.querySelector("[data-kb-sync-notice]");
+    if (kbNotice) kbNotice.hidden = !(payload.knowledge_base?.sync?.running);
+
+    const kbFormButton = root.querySelector("[data-kb-sync-form] button[type='submit']");
+    if (kbFormButton) kbFormButton.disabled = Boolean(payload.knowledge_base?.sync?.running);
+
+    const hardwareSummary = root.querySelector("[data-hardware-summary]");
+    if (hardwareSummary) hardwareSummary.innerHTML = renderHardwareSummary(payload);
+
+    const gpuList = root.querySelector("[data-gpu-list]");
+    if (gpuList) gpuList.innerHTML = renderHardwareGpuList(payload);
+  }
+
+  function shouldPollDashboard(payload) {
+    return (payload.jobs || []).some((job) => ["queued", "running", "paused"].includes(job.status));
+  }
+
+  function shouldPollSettings(payload) {
+    return Boolean(payload.ai_backend?.downloads_running) || Boolean(payload.knowledge_base?.sync?.running);
+  }
+
+  function initAsyncForms(root, attributeName, refreshFn) {
+    const boundAttr = `${attributeName}-listener-bound`;
+    if (root.hasAttribute(boundAttr)) return;
+    root.setAttribute(boundAttr, "true");
+    root.addEventListener("submit", async function (event) {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (!form.hasAttribute(attributeName)) return;
+      event.preventDefault();
+
+      const apiEndpoint = form.dataset.apiEndpoint || form.getAttribute("action");
+      if (!apiEndpoint) return;
+
+      form.classList.add("is-pending");
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton) submitButton.disabled = true;
+      try {
+        const response = await fetch(apiEndpoint, {
+          method: "POST",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          throw new Error(`Action failed with status ${response.status}`);
+        }
+        await refreshFn();
+      } catch (_error) {
+        window.location.reload();
+      } finally {
+        form.classList.remove("is-pending");
+        if (submitButton) submitButton.disabled = false;
+      }
+    });
+  }
+
+  function initScrollRestoration() {
+    const storageKey = `scanforge:scroll:${window.location.pathname}${window.location.search}`;
+    const saved = window.sessionStorage.getItem(storageKey);
+    if (saved) {
+      window.sessionStorage.removeItem(storageKey);
+      window.scrollTo({ top: Number(saved), behavior: "auto" });
+    }
+
+    document.addEventListener("submit", function (event) {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      const method = String(form.getAttribute("method") || "get").toLowerCase();
+      if (method !== "post") return;
+      if (form.hasAttribute("data-dashboard-action") || form.hasAttribute("data-settings-action") || form.hasAttribute("data-upload-form")) return;
+      window.sessionStorage.setItem(storageKey, String(window.scrollY));
+    }, true);
+  }
+
+  function initDashboard(root) {
+    let timerId = null;
+
+    const refresh = async function () {
+      let nextDelay = 5000;
+      try {
+        const payload = await fetchDashboardState();
+        updateDashboardPage(root, payload);
+        nextDelay = shouldPollDashboard(payload) ? 3000 : 12000;
+      } catch (_error) {
+        nextDelay = 5000;
+      }
+      if (timerId) window.clearTimeout(timerId);
+      timerId = window.setTimeout(refresh, nextDelay);
+    };
+
+    root.__refreshDashboard = refresh;
+    initAsyncForms(root, "data-dashboard-action", refresh);
+
+    const queueList = root.querySelector("[data-queue-list]");
+    if (queueList) initQueueDragAndDrop(queueList);
+
+    if (timerId) window.clearTimeout(timerId);
+    timerId = window.setTimeout(refresh, 3000);
+    window.addEventListener("beforeunload", function () {
+      if (timerId) window.clearTimeout(timerId);
+    });
+  }
+
+  function initSettingsPage(root) {
+    let timerId = null;
+
+    const refresh = async function () {
+      let nextDelay = 5000;
+      try {
+        const payload = await fetchSettingsState();
+        updateSettingsPage(root, payload);
+        nextDelay = shouldPollSettings(payload) ? 2500 : 10000;
+      } catch (_error) {
+        nextDelay = 5000;
+      }
+      if (timerId) window.clearTimeout(timerId);
+      timerId = window.setTimeout(refresh, nextDelay);
+    };
+
+    root.__refreshSettings = refresh;
+    initAsyncForms(root, "data-settings-action", refresh);
+
+    if (timerId) window.clearTimeout(timerId);
+    timerId = window.setTimeout(refresh, 2500);
+    window.addEventListener("beforeunload", function () {
+      if (timerId) window.clearTimeout(timerId);
+    });
+  }
+
   function updateJobPage(job) {
     setStatusBadge(document.getElementById("job-status"), job.status);
     const progressBar = document.getElementById("job-progress-bar");
-    if (progressBar) progressBar.style.width = `${Number(job.progress || 0)}%`;
+    if (progressBar) {
+      progressBar.style.width = `${Number(job.progress || 0)}%`;
+      progressBar.classList.toggle("progress-bar-active", job.status === "running");
+    }
     const progressText = document.getElementById("job-progress-text");
     if (progressText) progressText.textContent = `${Number(job.progress || 0)}%`;
     const currentStep = document.getElementById("job-current-step");
@@ -468,6 +1059,12 @@
     if (sourceRoot) sourceRoot.textContent = job.metadata?.project?.relative_root_name || t("pending");
     const fileCount = document.getElementById("job-file-count");
     if (fileCount) fileCount.textContent = String(job.metadata?.project?.file_count || 0);
+    const languages = document.getElementById("job-languages");
+    if (languages) {
+      languages.textContent = (job.metadata?.project?.programming_languages || []).join(", ") || t("none");
+    }
+    const polyglot = document.getElementById("job-polyglot");
+    if (polyglot) polyglot.textContent = t(job.metadata?.project?.polyglot ? "yes" : "no");
     const queuePosition = document.getElementById("job-queue-position");
     if (queuePosition) queuePosition.textContent = `#${job.queue_position || 0}`;
     const retestScope = document.getElementById("job-retest-scope");
@@ -500,7 +1097,7 @@
     const aiReview = document.getElementById("ai-review");
     if (aiReview) aiReview.innerHTML = renderAiReview(job);
     const kbSummary = document.getElementById("kb-summary");
-    if (kbSummary) kbSummary.innerHTML = renderKnowledgeBaseSummary(job);
+    if (kbSummary) kbSummary.innerHTML = renderJobKnowledgeBaseSummary(job);
     const kbTopReferences = document.getElementById("kb-top-references");
     if (kbTopReferences) {
       kbTopReferences.innerHTML = renderReferenceCards(
@@ -724,6 +1321,75 @@
     syncRepeatQuestion(form);
   }
 
+  function setUploadProgress(form, loaded, total) {
+    const root = form.querySelector("[data-upload-progress]");
+    const bar = form.querySelector("[data-upload-progress-bar]");
+    const text = form.querySelector("[data-upload-progress-text]");
+    const meta = form.querySelector("[data-upload-progress-meta]");
+    if (!root || !bar || !text || !meta) return;
+    root.hidden = false;
+    const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((loaded / total) * 100))) : 0;
+    bar.style.width = `${percent}%`;
+    bar.classList.toggle("progress-bar-active", true);
+    text.textContent = `${percent}%`;
+    meta.textContent = t("Uploaded {loaded} of {total}.", {
+      loaded: formatBytes(loaded),
+      total: formatBytes(total),
+    });
+  }
+
+  function initUploadProgress(form) {
+    const submitButton = form.querySelector('button[type="submit"]');
+    const progressRoot = form.querySelector("[data-upload-progress]");
+    if (!submitButton || !progressRoot) return;
+
+    form.addEventListener("submit", function (event) {
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+
+      submitButton.disabled = true;
+      setUploadProgress(form, 0, 0);
+
+      const request = new XMLHttpRequest();
+      request.open("POST", "/api/jobs/upload");
+      request.responseType = "json";
+
+      request.upload.addEventListener("progress", function (progressEvent) {
+        if (progressEvent.lengthComputable) {
+          setUploadProgress(form, progressEvent.loaded, progressEvent.total);
+        }
+      });
+
+      request.addEventListener("load", function () {
+        submitButton.disabled = false;
+        const bar = form.querySelector("[data-upload-progress-bar]");
+        if (bar) bar.classList.remove("progress-bar-active");
+        if (request.status >= 200 && request.status < 300) {
+          const payload = request.response || {};
+          const redirectUrl = payload.redirect_url || "/";
+          window.location.assign(redirectUrl);
+          return;
+        }
+        const meta = form.querySelector("[data-upload-progress-meta]");
+        if (meta) {
+          meta.textContent = t("Upload failed. Please try again.");
+        }
+      });
+
+      request.addEventListener("error", function () {
+        submitButton.disabled = false;
+        const bar = form.querySelector("[data-upload-progress-bar]");
+        if (bar) bar.classList.remove("progress-bar-active");
+        const meta = form.querySelector("[data-upload-progress-meta]");
+        if (meta) {
+          meta.textContent = t("Upload failed. Please try again.");
+        }
+      });
+
+      request.send(new FormData(form));
+    });
+  }
+
   async function repositionQueueJob(jobId, targetJobId, placement) {
     const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/queue/reposition`, {
       method: "POST",
@@ -749,6 +1415,8 @@
   }
 
   function initQueueDragAndDrop(container) {
+    if (container.hasAttribute("data-queue-dnd-bound")) return;
+    container.setAttribute("data-queue-dnd-bound", "true");
     const movableCards = Array.from(container.querySelectorAll('[data-queue-movable="true"]'));
     if (movableCards.length < 2) return;
 
@@ -794,8 +1462,15 @@
         container.classList.add("queue-reordering");
         try {
           await repositionQueueJob(draggedJobId, targetJobId, dragPlacement);
-          window.location.reload();
+          const dashboardRoot = container.closest("[data-dashboard-root]");
+          if (dashboardRoot && typeof dashboardRoot.__refreshDashboard === "function") {
+            await dashboardRoot.__refreshDashboard();
+          } else {
+            window.location.reload();
+          }
         } catch (_error) {
+          window.location.reload();
+        } finally {
           container.classList.remove("queue-reordering");
         }
       });
@@ -803,14 +1478,20 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    initScrollRestoration();
+
     const presetForm = document.querySelector("[data-preset-form]");
     if (presetForm) {
       initPresetForm(presetForm);
       initRepeatQuestion(presetForm);
+      initUploadProgress(presetForm);
     }
 
-    const queueList = document.querySelector("[data-queue-list]");
-    if (queueList) initQueueDragAndDrop(queueList);
+    const dashboardRoot = document.querySelector("[data-dashboard-root]");
+    if (dashboardRoot) initDashboard(dashboardRoot);
+
+    const settingsRoot = document.querySelector("[data-settings-root]");
+    if (settingsRoot) initSettingsPage(settingsRoot);
 
     const jobRoot = document.querySelector("[data-job-id]");
     if (jobRoot) initJobPage(jobRoot);

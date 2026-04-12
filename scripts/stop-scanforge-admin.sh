@@ -9,36 +9,33 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-if [[ -f "$ROOT_DIR/.env" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "$ROOT_DIR/.env"
-  set +a
-fi
+# Подключаем helper, чтобы остановка и очистка state были согласованы с запуском.
+# shellcheck source=/dev/null
+source "$ROOT_DIR/scripts/scanforge-lib.sh"
+scanforge_init_python "$ROOT_DIR"
+scanforge_load_project_env "$ROOT_DIR"
 
 RUN_DIR="${SCANFORGE_RUN_DIR:-/var/run/scanforge}"
 WEB_PID_FILE="$RUN_DIR/web.pid"
 WORKER_PID_FILE="$RUN_DIR/worker.pid"
+ENDPOINT_FILE="$RUN_DIR/endpoint.env"
 
-stop_pid_file() {
-  local pid_file="$1"
-  local pid
-  if [[ ! -f "$pid_file" ]]; then
-    return 0
+state_host=""
+state_port=""
+if scanforge_load_endpoint_state "$ENDPOINT_FILE"; then
+  state_host="$QA_PORTAL_HOST"
+  state_port="$QA_PORTAL_PORT"
+fi
+
+scanforge_stop_pid_file "$WORKER_PID_FILE"
+scanforge_stop_pid_file "$WEB_PID_FILE"
+
+if [[ -n "$state_host" && -n "$state_port" ]]; then
+  if ! scanforge_healthcheck "$state_host" "$state_port"; then
+    rm -f "$ENDPOINT_FILE"
   fi
-
-  pid="$(cat "$pid_file" 2>/dev/null || true)"
-  if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
-    sleep 1
-    if kill -0 "$pid" 2>/dev/null; then
-      kill -9 "$pid" 2>/dev/null || true
-    fi
-  fi
-  rm -f "$pid_file"
-}
-
-stop_pid_file "$WORKER_PID_FILE"
-stop_pid_file "$WEB_PID_FILE"
+else
+  rm -f "$ENDPOINT_FILE"
+fi
 
 printf 'ScanForge остановлен.\n'

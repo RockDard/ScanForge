@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import re
 import shutil
@@ -8,7 +7,9 @@ import tarfile
 import textwrap
 import xml.etree.ElementTree as ET
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any
 
 from .config import (
     KEEP_UPLOADS,
@@ -22,6 +23,7 @@ from .models import Artifact, Finding
 from .tooling import run_command
 
 
+# Расширяем набор распознаваемых текстовых файлов, чтобы видеть полиглотные проекты целиком.
 SOURCE_EXTENSIONS = {
     ".c",
     ".cc",
@@ -35,6 +37,23 @@ SOURCE_EXTENSIONS = {
     ".pro",
     ".pri",
     ".cmake",
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".json",
+    ".yml",
+    ".yaml",
+    ".xml",
+    ".md",
+    ".sh",
+    ".java",
+    ".rs",
+    ".go",
+    ".cs",
+    ".m",
+    ".mm",
+    ".ui",
     ".txt",
 }
 ARCHIVE_EXTENSIONS = {".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz"}
@@ -76,6 +95,54 @@ CODE_FRAGMENT_KEYWORDS = re.compile(
 )
 FUNCTION_LIKE_PATTERN = re.compile(r"\b[A-Za-z_][A-Za-z0-9_:<>]*\s*\(")
 DECLARATION_LIKE_PATTERN = re.compile(r"\b[A-Za-z_][A-Za-z0-9_:<>*&]+\s+[A-Za-z_][A-Za-z0-9_]*\s*(=|;)")
+LANGUAGE_BY_SUFFIX = {
+    ".c": "C/C++",
+    ".cc": "C/C++",
+    ".cpp": "C/C++",
+    ".cxx": "C/C++",
+    ".h": "C/C++",
+    ".hh": "C/C++",
+    ".hpp": "C/C++",
+    ".hxx": "C/C++",
+    ".qml": "QML",
+    ".pro": "QMake",
+    ".pri": "QMake",
+    ".cmake": "CMake",
+    ".py": "Python",
+    ".js": "JavaScript",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript",
+    ".json": "JSON",
+    ".yml": "YAML",
+    ".yaml": "YAML",
+    ".xml": "XML",
+    ".md": "Markdown",
+    ".sh": "Shell",
+    ".java": "Java",
+    ".rs": "Rust",
+    ".go": "Go",
+    ".cs": "C#",
+    ".m": "Objective-C",
+    ".mm": "Objective-C++",
+    ".ui": "Qt Designer UI",
+}
+LANGUAGE_BY_FILENAME = {
+    "cmakelists.txt": "CMake",
+    "dockerfile": "Docker",
+}
+PROGRAMMING_LANGUAGES = {
+    "C/C++",
+    "QML",
+    "Python",
+    "JavaScript",
+    "TypeScript",
+    "Java",
+    "Rust",
+    "Go",
+    "C#",
+    "Objective-C",
+    "Objective-C++",
+}
 
 
 class ExtractionError(RuntimeError):
@@ -236,6 +303,55 @@ def iter_project_files(root: Path) -> dict[str, Path]:
     return files
 
 
+# Определяем языки по расширениям и служебным именам файлов.
+def detect_language_inventory(root: Path) -> dict[str, Any]:
+    language_counts: dict[str, int] = {}
+    for relative_path in iter_project_files(root):
+        path = Path(relative_path)
+        language = LANGUAGE_BY_FILENAME.get(path.name.casefold())
+        if not language:
+            language = LANGUAGE_BY_SUFFIX.get(path.suffix.lower())
+        if not language:
+            continue
+        language_counts[language] = language_counts.get(language, 0) + 1
+
+    ordered_languages = sorted(language_counts, key=lambda item: (-language_counts[item], item.casefold()))
+    programming_languages = [item for item in ordered_languages if item in PROGRAMMING_LANGUAGES]
+    return {
+        "language_counts": language_counts,
+        "languages": ordered_languages,
+        "programming_language_counts": {item: language_counts[item] for item in programming_languages},
+        "programming_languages": programming_languages,
+        "polyglot": len(programming_languages) > 1,
+    }
+
+
+def assess_multilinguality(language_inventory: dict[str, Any], *, has_tests: bool, build_systems: list[str]) -> dict[str, Any]:
+    programming_languages = list(language_inventory.get("programming_languages", []))
+    notes: list[str] = []
+    if len(programming_languages) > 1:
+        notes.append(f"Detected a polyglot codebase with {len(programming_languages)} programming languages.")
+    if len(programming_languages) >= 3:
+        notes.append("Cross-language ownership and integration checks should be treated as a release risk.")
+    if len(programming_languages) > 1 and not has_tests:
+        notes.append("No automated tests were detected for a project that spans multiple languages.")
+    if len(programming_languages) > 1 and not build_systems:
+        notes.append("No build manifest was detected for a polyglot project layout.")
+    risk_level = "none"
+    if len(programming_languages) > 1:
+        risk_level = "medium" if not has_tests else "low"
+    if len(programming_languages) >= 3 and not has_tests:
+        risk_level = "high"
+    return {
+        "polyglot": len(programming_languages) > 1,
+        "programming_language_count": len(programming_languages),
+        "primary_language": programming_languages[0] if programming_languages else None,
+        "secondary_languages": programming_languages[1:],
+        "risk_level": risk_level,
+        "notes": notes,
+    }
+
+
 def is_build_manifest(relative_path: str) -> bool:
     path = Path(relative_path)
     return path.name == "CMakeLists.txt" or path.suffix.lower() in {".pro", ".pri", ".cmake"}
@@ -290,6 +406,7 @@ def line_number_for_offset(content: str, offset: int) -> int:
 
 def detect_project(root: Path) -> dict:
     files = iter_text_files(root)
+    language_inventory = detect_language_inventory(root)
     file_paths = [str(path.relative_to(root)) for path in files]
     extension_counts: dict[str, int] = {}
     qt_markers = 0
@@ -312,6 +429,11 @@ def detect_project(root: Path) -> dict:
             fuzz_markers += 1
 
     top_level = sorted(child.name for child in root.iterdir()) if root.exists() else []
+    multilinguality = assess_multilinguality(
+        language_inventory,
+        has_tests=test_markers > 0,
+        build_systems=sorted(build_systems),
+    )
     return {
         "root": str(root),
         "relative_root_name": root.name,
@@ -323,6 +445,12 @@ def detect_project(root: Path) -> dict:
         "has_tests": test_markers > 0,
         "has_fuzz_targets": fuzz_markers > 0,
         "top_level_entries": top_level,
+        "languages": language_inventory["languages"],
+        "language_counts": language_inventory["language_counts"],
+        "programming_languages": language_inventory["programming_languages"],
+        "programming_language_counts": language_inventory["programming_language_counts"],
+        "polyglot": language_inventory["polyglot"],
+        "multilinguality": multilinguality,
     }
 
 
@@ -844,6 +972,47 @@ def analyze_quality(root: Path, files: list[Path], project_info: dict, max_worke
                 description="No Qt Test or CTest markers were found in the uploaded project.",
                 source="project-discovery",
                 recommendation="Add automated tests to improve regression safety.",
+            )
+        )
+    programming_languages = project_info.get("programming_languages", [])
+    multilinguality = project_info.get("multilinguality", {})
+    if programming_languages and len(programming_languages) > 1:
+        findings.append(
+            Finding(
+                category="quality",
+                severity="info",
+                title="Polyglot project detected",
+                description=(
+                    "The uploaded project contains multiple programming languages: "
+                    f"{', '.join(programming_languages)}."
+                ),
+                source="language-discovery",
+                recommendation="Check language boundaries, adapters, and shared contracts during review.",
+            )
+        )
+    if multilinguality.get("polyglot") and not project_info.get("has_tests"):
+        findings.append(
+            Finding(
+                category="quality",
+                severity="medium",
+                title="Polyglot project without detected tests",
+                description="Multiple programming languages were detected, but automated tests were not found.",
+                source="multilinguality-checks",
+                recommendation="Add automated coverage for cross-language paths before release.",
+            )
+        )
+    if multilinguality.get("programming_language_count", 0) >= 3:
+        findings.append(
+            Finding(
+                category="quality",
+                severity="low",
+                title="Cross-language integration complexity",
+                description=(
+                    "Three or more programming languages were detected in one project, "
+                    "which raises the chance of integration drift."
+                ),
+                source="multilinguality-checks",
+                recommendation="Review language ownership, interfaces, and build/test orchestration for each layer.",
             )
         )
     return findings

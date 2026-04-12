@@ -14,7 +14,7 @@
       <span class="status status-{{ job.status }}" id="job-status">{{ label("status", job.status) }}</span>
     </div>
     <div class="progress-track large">
-      <div class="progress-bar" id="job-progress-bar" style="width: {{ job.progress }}%"></div>
+      <div class="progress-bar {% if job.status == 'running' %}progress-bar-active{% endif %}" id="job-progress-bar" style="width: {{ job.progress }}%"></div>
     </div>
     <p id="job-current-step">{{ tr(job.current_step) }}</p>
 
@@ -40,9 +40,14 @@
       <div><span>{{ tr("Report limit") }}</span><strong id="job-report-limit">{{ job.options.max_report_findings }}</strong></div>
       <div><span>{{ tr("Source root") }}</span><strong id="job-source-root">{{ job.metadata.get("project", {}).get("relative_root_name", tr("pending")) }}</strong></div>
       <div><span>{{ tr("Files") }}</span><strong id="job-file-count">{{ job.metadata.get("project", {}).get("file_count", 0) }}</strong></div>
+      <div><span>{{ tr("Languages") }}</span><strong id="job-languages">{{ job.metadata.get("project", {}).get("programming_languages", []) | join(", ") or tr("none") }}</strong></div>
+      <div><span>{{ tr("Polyglot") }}</span><strong id="job-polyglot">{{ tr("yes" if job.metadata.get("project", {}).get("polyglot") else "no") }}</strong></div>
     </div>
 
     <div class="button-row" id="artifact-buttons">
+      {% if job.html_report %}
+      <a class="button-secondary" href="/jobs/{{ job.id }}/report">{{ tr("View report") }}</a>
+      {% endif %}
       {% if job.html_report %}
       <a class="button-secondary" href="/jobs/{{ job.id }}/artifacts/{{ job.html_report }}">{{ tr("HTML report") }}</a>
       {% endif %}
@@ -75,7 +80,60 @@
         <button type="submit">{{ tr("Move down") }}</button>
       </form>
       {% endif %}
+      {% if job.status != "running" %}
+      <form action="/jobs/{{ job.id }}/delete" method="post">
+        <input type="hidden" name="next_url" value="/">
+        <button type="submit">{{ tr("Delete") }}</button>
+      </form>
+      {% endif %}
       <a class="button-secondary" href="/jobs/{{ job.id }}/rerun">{{ tr("Rerun") }}</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Languages") }}</p>
+        <h2>{{ tr("Project language profile") }}</h2>
+      </div>
+    </div>
+    {% set multilinguality = job.metadata.get("project", {}).get("multilinguality", {}) %}
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span>{{ tr("Programming languages") }}</span>
+        <strong>{{ job.metadata.get("project", {}).get("programming_languages", []) | length }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Primary language") }}</span>
+        <strong>{{ multilinguality.get("primary_language") or tr("none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Polyglot") }}</span>
+        <strong>{{ tr("yes" if multilinguality.get("polyglot") else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Multilingual risk") }}</span>
+        <strong>{{ label("severity", multilinguality.get("risk_level")) if multilinguality.get("risk_level") in {"critical", "high", "medium", "low", "info"} else tr("none") }}</strong>
+      </div>
+    </div>
+    <div class="tag-row">
+      {% for language in job.metadata.get("project", {}).get("programming_languages", []) %}
+      <span class="tag tag-soft">{{ language }}</span>
+      {% endfor %}
+      {% if not job.metadata.get("project", {}).get("programming_languages") %}
+      <p class="empty-state">{{ tr("No programming languages were recognized yet.") }}</p>
+      {% endif %}
+    </div>
+    <div class="reference-list compact">
+      {% for note in multilinguality.get("notes", []) %}
+      <article class="reference-item">
+        <strong>{{ tr("Multilinguality") }}</strong>
+        <p>{{ note }}</p>
+      </article>
+      {% endfor %}
+      {% if not multilinguality.get("notes") %}
+      <p class="empty-state">{{ tr("No multilinguality notes were generated for this project.") }}</p>
+      {% endif %}
     </div>
   </section>
 
@@ -349,7 +407,7 @@
           <span class="status status-{{ step.status }}">{{ label("status", step.status) }}</span>
         </div>
         <div class="progress-track">
-          <div class="progress-bar" style="width: {{ step.progress }}%"></div>
+          <div class="progress-bar {% if step.status == 'running' %}progress-bar-active{% endif %}" style="width: {{ step.progress }}%"></div>
         </div>
         <small>{{ tr(step.message or "Waiting") }}</small>
       </div>

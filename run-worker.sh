@@ -3,10 +3,14 @@ set -euo pipefail
 
 export PATH="$HOME/.local/bin:$PATH"
 
-PYTHON_BIN="python3"
-if [[ -x "$(dirname "${BASH_SOURCE[0]}")/.venv/bin/python" ]]; then
-  PYTHON_BIN="$(dirname "${BASH_SOURCE[0]}")/.venv/bin/python"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$SCRIPT_DIR"
+
+# Общий helper подготавливает Python и PYTHONPATH независимо от cwd запуска.
+# shellcheck source=/dev/null
+source "$ROOT_DIR/scripts/scanforge-lib.sh"
+scanforge_init_python "$ROOT_DIR"
+scanforge_load_project_env "$ROOT_DIR"
 
 POLL_SECONDS="${QA_PORTAL_WORKER_POLL_SECONDS:-3}"
 WORKER_PROCESSES="${QA_PORTAL_WORKER_PROCESSES:-auto}"

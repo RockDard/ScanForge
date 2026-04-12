@@ -49,6 +49,7 @@ class PortalAnalysisTests(unittest.TestCase):
         self.assertTrue(info["is_qt_project"])
         self.assertTrue(info["has_tests"])
         self.assertIn("cmake", info["build_systems"])
+        self.assertIn("C/C++", info["programming_languages"])
 
     def test_static_rules_find_expected_findings(self):
         files = iter_text_files(FIXTURE_ROOT)
@@ -98,6 +99,40 @@ class PortalAnalysisTests(unittest.TestCase):
             self.assertIn("Commented-out code block", titles)
             self.assertIn("Disabled code region", titles)
             self.assertIn("Duplicate include/import directive", titles)
+
+    def test_project_detection_recognizes_polyglot_languages(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "src").mkdir()
+            (root / "src" / "main.cpp").write_text("int main() { return 0; }\n", encoding="utf-8")
+            (root / "tools").mkdir()
+            (root / "tools" / "helper.py").write_text("print('ok')\n", encoding="utf-8")
+            (root / "ui").mkdir()
+            (root / "ui" / "MainView.qml").write_text("import QtQuick\nItem {}\n", encoding="utf-8")
+
+            info = detect_project(root)
+
+            self.assertTrue(info["polyglot"])
+            self.assertIn("C/C++", info["programming_languages"])
+            self.assertIn("Python", info["programming_languages"])
+            self.assertIn("QML", info["programming_languages"])
+            self.assertGreaterEqual(info["multilinguality"]["programming_language_count"], 3)
+
+    def test_quality_analysis_adds_multilinguality_findings(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "src").mkdir()
+            source = root / "src" / "main.cpp"
+            source.write_text("int main() { return 0; }\n", encoding="utf-8")
+            (root / "scripts").mkdir()
+            (root / "scripts" / "helper.py").write_text("print('ok')\n", encoding="utf-8")
+
+            project_info = detect_project(root)
+            findings = analyze_quality(root, iter_text_files(root), project_info)
+            titles = {item.title for item in findings}
+
+            self.assertIn("Polyglot project detected", titles)
+            self.assertIn("Polyglot project without detected tests", titles)
 
     def test_fuzzing_generates_artifacts(self):
         files = iter_text_files(FIXTURE_ROOT)

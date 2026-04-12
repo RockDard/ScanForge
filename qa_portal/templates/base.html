@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ tr(title or "ScanForge") }}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="shortcut icon" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/styles.css">
   <script>
     window.ScanForgeI18n = {{ ui_i18n | tojson }};
@@ -34,6 +36,7 @@
             <a class="lang-link {% if lang == 'ru' %}active{% endif %}" href="{{ lang_switch_urls.ru }}">RU</a>
           </div>
           <a class="ghost-link" href="/">{{ tr("Dashboard") }}</a>
+          <a class="ghost-link" href="/settings">{{ tr("Settings") }}</a>
           <a class="ghost-link" href="/docs">API</a>
         </div>
         <div class="hero-visual">

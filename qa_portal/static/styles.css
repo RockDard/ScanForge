@@ -87,18 +87,18 @@ img {
 .shell {
   width: min(1820px, calc(100vw - 40px));
   margin: 0 auto;
-  padding: 28px 0 60px;
+  padding: 16px 0 48px;
 }
 
 .hero {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-  gap: 24px;
+  gap: 16px;
   align-items: stretch;
-  margin-bottom: 28px;
-  padding: 30px;
-  border-radius: 40px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 24px;
   overflow: hidden;
   color: #f7f2e8;
   background:
@@ -110,9 +110,9 @@ img {
 .hero::before {
   content: "";
   position: absolute;
-  inset: 14px;
+  inset: 8px;
   border: 1px solid rgba(255, 243, 232, 0.16);
-  border-radius: 28px;
+  border-radius: 18px;
   pointer-events: none;
 }
 
@@ -124,13 +124,13 @@ img {
 
 .hero-copy {
   display: grid;
-  gap: 14px;
+  gap: 8px;
   align-content: start;
 }
 
 .hero-side {
   display: grid;
-  gap: 16px;
+  gap: 10px;
   align-content: space-between;
 }
 
@@ -198,14 +198,25 @@ img {
   margin: 0;
   max-width: 11ch;
   font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
-  font-size: clamp(2.6rem, 4.8vw, 4.7rem);
-  line-height: 0.94;
+  font-size: clamp(1.8rem, 3.2vw, 2.9rem);
+  line-height: 0.98;
   letter-spacing: -0.04em;
+}
+
+.dashboard-page .hero h1 {
+  max-width: none;
+  white-space: nowrap;
+  font-size: clamp(1.5rem, 2.4vw, 2.15rem);
 }
 
 .job-page .hero h1 {
   max-width: 14ch;
-  font-size: clamp(2.4rem, 4.3vw, 4rem);
+  font-size: clamp(1.7rem, 2.7vw, 2.6rem);
+}
+
+.settings-page .hero h1 {
+  max-width: none;
+  font-size: clamp(1.55rem, 2.3vw, 2.2rem);
 }
 
 .lede,
@@ -226,27 +237,27 @@ img {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .hero-badges span {
   display: inline-flex;
   align-items: center;
-  padding: 9px 14px;
+  padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 243, 232, 0.16);
   background: rgba(255, 250, 244, 0.1);
   backdrop-filter: blur(10px);
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
 
 .hero-visual {
   display: grid;
-  gap: 14px;
-  padding: 14px;
-  border-radius: 28px;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 18px;
   background: rgba(255, 250, 244, 0.09);
   border: 1px solid rgba(255, 243, 232, 0.14);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
@@ -254,8 +265,10 @@ img {
 
 .hero-graphic {
   width: 100%;
-  min-height: 250px;
-  border-radius: 24px;
+  min-height: 88px;
+  max-height: 110px;
+  object-fit: cover;
+  border-radius: 16px;
   box-shadow: 0 18px 36px rgba(5, 14, 24, 0.24);
 }
 
@@ -276,8 +289,8 @@ button,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 46px;
-  padding: 0 18px;
+  min-height: 40px;
+  padding: 0 16px;
   border-radius: 999px;
   border: 1px solid transparent;
   font-weight: 800;
@@ -480,12 +493,42 @@ button:disabled,
     linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(246, 250, 247, 0.92));
 }
 
+.upload-progress-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at top right, rgba(223, 245, 239, 0.9), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(245, 251, 249, 0.94));
+}
+
 .button-row {
   margin-top: 16px;
 }
 
 .button-row form {
   margin: 0;
+}
+
+.reference-actions {
+  display: grid;
+  gap: 10px;
+  align-items: start;
+  margin-top: 10px;
+}
+
+.download-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min(280px, 100%);
+}
+
+.download-progress-meta {
+  color: var(--muted);
+  line-height: 1.4;
 }
 
 .stats-strip {
@@ -698,7 +741,15 @@ button:disabled,
     linear-gradient(90deg, rgba(255, 255, 255, 0.28), transparent 28%),
     linear-gradient(90deg, var(--gold), var(--accent), #1c9bd0);
   background-size: 120px 100%, 100% 100%;
+}
+
+.progress-bar.progress-bar-active {
   animation: progress-glide 4s linear infinite;
+}
+
+.progress-track.compact {
+  height: 10px;
+  margin: 8px 0 0;
 }
 
 .summary-card,
@@ -739,6 +790,53 @@ small,
   border: 1px solid var(--line);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 252, 247, 0.74));
+}
+
+.tool-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tool-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.tool-install-slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 148px;
+  min-height: 46px;
+}
+
+.tool-install-slot .status {
+  transition: opacity 160ms ease;
+}
+
+.tool-install-form {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.tool-row-missing:hover .tool-install-form,
+.tool-row-missing:focus-within .tool-install-form {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tool-row-missing:hover .tool-install-slot .status,
+.tool-row-missing:focus-within .tool-install-slot .status {
+  opacity: 0;
 }
 
 code {
@@ -901,6 +999,12 @@ code {
 
 .queue-controls form {
   margin: 0;
+}
+
+form.is-pending button,
+form.is-pending .button-secondary {
+  pointer-events: none;
+  opacity: 0.72;
 }
 
 .reference-list {

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ScanForge">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#10324a"/>
+      <stop offset="0.55" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#b86a42"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="18" y1="14" x2="46" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f5e7c4"/>
+      <stop offset="1" stop-color="#dff5ef"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)"/>
+  <path d="M18 20h18c8.284 0 15 6.716 15 15v11H33c-8.284 0-15-6.716-15-15V20Z" fill="none" stroke="url(#glow)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M21 43 43 21" stroke="#f7f2e8" stroke-width="4.5" stroke-linecap="round"/>
+  <circle cx="44" cy="44" r="5" fill="#f7f2e8"/>
+</svg>
