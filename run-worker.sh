@@ -11,8 +11,9 @@ ROOT_DIR="$SCRIPT_DIR"
 source "$ROOT_DIR/scripts/scanforge-lib.sh"
 scanforge_init_python "$ROOT_DIR"
 scanforge_load_project_env "$ROOT_DIR"
+scanforge_assert_python_runtime "$ROOT_DIR"
 
 POLL_SECONDS="${QA_PORTAL_WORKER_POLL_SECONDS:-3}"
 WORKER_PROCESSES="${QA_PORTAL_WORKER_PROCESSES:-auto}"
 
-"$PYTHON_BIN" -m qa_portal.worker pool --poll-seconds "$POLL_SECONDS" --processes "$WORKER_PROCESSES"
+exec "$PYTHON_BIN" -m qa_portal.worker pool --poll-seconds "$POLL_SECONDS" --processes "$WORKER_PROCESSES"

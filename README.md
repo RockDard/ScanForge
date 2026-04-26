@@ -2,6 +2,10 @@
 
 This repository now contains an MVP web platform for uploading C/C++ and Qt-oriented projects on Linux, running broad analysis, tracking progress, and downloading HTML or PDF reports.
 
+Target runtime: Linux only. The primary supported operating system is Ubuntu 22.04 LTS; Windows and WSL are not supported deployment targets for ScanForge.
+
+See `README_ROADMAP.md` for the live implementation plan, completed work, and remaining hardening/SAST roadmap.
+
 ## What the MVP does
 
 - Accepts an uploaded archive or single file through a web interface.
@@ -11,6 +15,7 @@ This repository now contains an MVP web platform for uploading C/C++ and Qt-orie
 - Supports rerunning an earlier job from the browser.
 - Supports cancelling queued or running jobs.
 - Adds an AI review layer: remote AI if configured, deterministic local fallback if not.
+- Adds AI-assisted operational playbooks for triage, root-cause review, suggested tests, and fuzz focus.
 - Maintains a local mirror of official vulnerability intelligence feeds, including FSTEC BDU.
 - Runs analysis outside the web process through worker processes, and can use a dedicated Docker worker service.
 - Runs built-in checks for:
@@ -20,12 +25,20 @@ This repository now contains an MVP web platform for uploading C/C++ and Qt-orie
   - redundancy such as commented-out code blocks and duplicate includes/imports
   - build and test readiness
   - fuzzing readiness
+  - dependency inventory and SBOM-style manifest extraction
+  - finding lifecycle comparison against the previous baseline
+  - sanitizer-backed dynamic analysis when the toolchain supports it
 - Generates:
   - `report.html`
   - `report.pdf`
   - `report.json`
   - `ai_review.md`
   - `knowledge_base_matches.json`
+  - `sbom.json`
+  - `finding_lifecycle.json`
+  - `release_gate.json`
+  - `compliance_summary.json`
+  - `integration_handoff.md`
   - optional fuzzing helper artifacts
 - Keeps the job detail page live by polling the API instead of full page reloads.
 - Extracts uploaded archives with traversal and size checks before analysis begins.
@@ -43,13 +56,18 @@ This repository now contains an MVP web platform for uploading C/C++ and Qt-orie
 - `run-sync-kb.sh` - sync the local knowledge-base mirror from official sources.
 - `run-tests.sh` - unit and shell test runner.
 
-## Install Python dependencies
+## Bootstrap the environment
 
-Create a local virtual environment and install the Python dependencies:
+Prepare the project-local virtual environment, install pinned Python dependencies, and run preflight diagnostics:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+./scripts/setup-scanforge.sh
+```
+
+Run only the environment diagnostics:
+
+```bash
+./scripts/scanforge-preflight.sh
 ```
 
 ## Run the portal
@@ -68,6 +86,12 @@ Sync the local vulnerability knowledge base:
 
 ```bash
 ./run-sync-kb.sh --force
+```
+
+Send an archive from CI or another automation flow:
+
+```bash
+./scripts/scanforge-ci-agent.sh http://127.0.0.1:8000 ./project.zip
 ```
 
 Open:
@@ -104,10 +128,123 @@ To stop the background instance manually, run:
 pkexec ./scripts/stop-scanforge-admin.sh
 ```
 
+## Systemd service files
+
+Generate reusable service templates for a Linux host:
+
+```bash
+./scripts/generate-systemd-units.sh --output-dir ./data/systemd
+```
+
+The generator writes `scanforge.env`, `scanforge-web.service`, and `scanforge-worker.service`, then prints install commands for `/etc/scanforge` and `/etc/systemd/system`.
+
+## Network access controls
+
+`run-server.sh`, the administrator launcher, Docker, and generated systemd units use `QA_PORTAL_HOST` and `QA_PORTAL_PORT` to decide where the web UI listens. The Settings page shows the effective bind address plus detected LAN URLs for access from another machine.
+
+For network-facing deployments, set an explicit host allowlist:
+
+```bash
+QA_PORTAL_ALLOWED_HOSTS=scanforge.example.test,192.168.1.20:8000
+```
+
+Optional CORS responses are disabled unless `QA_PORTAL_CORS_ORIGINS` is set. Use exact trusted origins rather than `*` when credentials are enabled:
+
+```bash
+QA_PORTAL_CORS_ORIGINS=https://scanforge.example.test
+QA_PORTAL_CORS_ALLOW_CREDENTIALS=1
+```
+
+For a network bind, the launch scripts can enable the initial Basic Auth setup automatically. The generated admin password is stored locally in `data/settings/auth_bootstrap.json` unless `QA_PORTAL_ADMIN_PASSWORD` is set explicitly:
+
+```bash
+QA_PORTAL_AUTH_AUTO_SETUP=1
+QA_PORTAL_AUTH_BOOTSTRAP=1
+QA_PORTAL_ADMIN_USER=admin
+```
+
+You can print or create the bootstrap credentials with:
+
+```bash
+python -m qa_portal.auth bootstrap
+```
+
+## Production reverse proxy and TLS
+
+For a production Ubuntu 22.04 deployment, bind ScanForge to loopback and terminate TLS in a reverse proxy:
+
+```bash
+QA_PORTAL_HOST=127.0.0.1
+QA_PORTAL_PORT=8000
+QA_PORTAL_ALLOWED_HOSTS=scanforge.example.test
+QA_PORTAL_AUTH_ENABLED=1
+QA_PORTAL_ADMIN_USER=admin
+QA_PORTAL_ADMIN_PASSWORD='<store-in-root-only-env-file>'
+```
+
+Example Nginx server block:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name scanforge.example.test;
+
+    ssl_certificate /etc/letsencrypt/live/scanforge.example.test/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/scanforge.example.test/privkey.pem;
+
+    client_max_body_size 512m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+```
+
+Keep `QA_PORTAL_CORS_ORIGINS` empty unless another trusted origin must call the API from a browser.
+
+## Ubuntu 22.04 release validation
+
+Validate the release matrix on the target OS:
+
+```bash
+python3 -m qa_portal.ubuntu_validation validate-matrix
+python3 -m qa_portal.ubuntu_validation run-matrix
+python3 -m qa_portal.ubuntu_validation check-release
+```
+
+The runner writes `data/validation/ubuntu_2204_validation_report.json` and per-check logs under `data/validation/logs`. A release is ready only when `check-release` exits with code `0`.
+
+## Audit log
+
+ScanForge writes security-relevant operator events as JSONL to `data/audit/events.jsonl`. The audit stream records authentication attempts, analysis starts/reruns, tool install dry-runs/queues, job cancellations, settings changes, and finding review decisions. Secret-like fields such as passwords, tokens, cookies, and API keys are redacted before writing.
+
+Admins can inspect the latest events through:
+
+```text
+GET /api/audit?limit=100
+```
+
 ## Run tests
 
 ```bash
 ./run-tests.sh
+```
+
+Run the optional live web smoke stage:
+
+```bash
+SCANFORGE_RUN_WEB_SMOKE=1 ./run-tests.sh
+```
+
+Or run it directly:
+
+```bash
+./scripts/run-web-smoke.sh
 ```
 
 ## Docker launch
@@ -147,6 +284,16 @@ Environment variables:
 - `QA_PORTAL_WORKER_POLL_SECONDS`
 - `QA_PORTAL_KEEP_WORKSPACE`
 - `QA_PORTAL_KEEP_UPLOADS`
+- `QA_PORTAL_HOST`
+- `QA_PORTAL_PORT`
+- `QA_PORTAL_ALLOWED_HOSTS`
+- `QA_PORTAL_CORS_ORIGINS`
+- `QA_PORTAL_CORS_ALLOW_CREDENTIALS`
+- `QA_PORTAL_AUTH_AUTO_SETUP`
+- `QA_PORTAL_AUTH_BOOTSTRAP`
+- `QA_PORTAL_AUTH_ENABLED`
+- `QA_PORTAL_ADMIN_USER`
+- `QA_PORTAL_ADMIN_PASSWORD`
 - `QA_PORTAL_MAX_ARCHIVE_FILE_COUNT`
 - `QA_PORTAL_MAX_ARCHIVE_TOTAL_BYTES`
 - `QA_PORTAL_RESOURCE_TARGET_UTILIZATION_PERCENT`
@@ -169,6 +316,18 @@ Environment variables:
 - `AI_ANALYZER_TIMEOUT_SECONDS`
 
 The expected endpoint contract is an OpenAI-compatible chat completion endpoint returning `choices[0].message.content`.
+
+## Environment diagnostics
+
+The settings page now includes a dedicated environment diagnostics section that shows:
+
+- the current Python interpreter path and version
+- whether the project `.venv` exists and is active
+- whether `pip` and the `venv` module are available
+- how many pinned requirements from `requirements.txt` are currently satisfied
+- the detected package manager on the host
+
+The `/api/system` and `/api/environment` endpoints expose the same preflight state for automation.
 
 ## Toolchain notes
 
@@ -236,9 +395,13 @@ When the yearly NVD mirror is enabled, the sync process downloads all configured
 - The API exposes `/api/knowledge-base` for feed-level local mirror status.
 - Job detail pages show:
   - executive summary with risk score and verdict
-  - AI review with release decision, blockers, and quick wins
+  - AI review with release decision, blockers, root causes, fix strategy, suggested tests, and fuzz targets
   - adaptive execution plan with CPU/RAM/GPU allocation
   - knowledge-base matches for findings and project references
+  - dependency inventory and supply-chain summary
+  - dynamic-analysis eligibility and sanitizer run outcome
+  - finding lifecycle with new, persisting, and fixed findings
+  - CI/CD metadata attached to the upload
   - recommended next actions
   - live step updates
   - HTML preview

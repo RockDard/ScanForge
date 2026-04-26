@@ -343,12 +343,12 @@
     if (!review) {
       return `<p class="empty-state">${escapeHtml(t("AI review will appear during report generation."))}</p>`;
     }
-    const blockers = (review.blockers || []).length
-      ? review.blockers.map((item) => `<p>${escapeHtml(item)}</p>`).join("")
-      : `<p>${escapeHtml(t("No blockers generated."))}</p>`;
-    const quickWins = (review.quick_wins || []).length
-      ? review.quick_wins.map((item) => `<p>${escapeHtml(item)}</p>`).join("")
-      : `<p>${escapeHtml(t("No quick wins generated."))}</p>`;
+    const renderParagraphList = function (items, emptyMessage) {
+      return (items || []).length
+        ? items.map((item) => `<p>${escapeHtml(item)}</p>`).join("")
+        : `<p>${escapeHtml(t(emptyMessage))}</p>`;
+    };
+    const activePlaybooks = (review.active_playbooks || []).map((item) => t(item)).join(", ") || t("none");
     return `
       <div class="summary-grid">
         <div class="summary-card">
@@ -363,7 +363,15 @@
           <span>${escapeHtml(t("Confidence"))}</span>
           <strong>${escapeHtml(review.confidence || "pending")}</strong>
         </div>
+        <div class="summary-card">
+          <span>${escapeHtml(t("Active playbooks"))}</span>
+          <strong>${escapeHtml(activePlaybooks)}</strong>
+        </div>
       </div>
+      <article class="action-card">
+        <strong>${escapeHtml(t("Routing reason"))}</strong>
+        <p>${escapeHtml(review.routing_reason || t("No routing note was generated."))}</p>
+      </article>
       <article class="action-card">
         <strong>${escapeHtml(t("Overview"))}</strong>
         <p>${escapeHtml(review.overview || t("No AI review yet."))}</p>
@@ -375,15 +383,112 @@
       <div class="two-column">
         <article class="action-card">
           <strong>${escapeHtml(t("Blockers"))}</strong>
-          ${blockers}
+          ${renderParagraphList(review.blockers || [], "No blockers generated.")}
         </article>
         <article class="action-card">
           <strong>${escapeHtml(t("Quick Wins"))}</strong>
-          ${quickWins}
+          ${renderParagraphList(review.quick_wins || [], "No quick wins generated.")}
+        </article>
+      </div>
+      <div class="two-column ai-detail-grid">
+        <article class="action-card">
+          <strong>${escapeHtml(t("Root Causes"))}</strong>
+          ${renderParagraphList(review.root_causes || [], "No root causes generated.")}
+        </article>
+        <article class="action-card">
+          <strong>${escapeHtml(t("Fix Strategy"))}</strong>
+          ${renderParagraphList(review.fix_strategy || [], "No fix strategy generated.")}
+        </article>
+        <article class="action-card">
+          <strong>${escapeHtml(t("Suggested Tests"))}</strong>
+          ${renderParagraphList(review.suggested_tests || [], "No suggested tests generated.")}
+        </article>
+        <article class="action-card">
+          <strong>${escapeHtml(t("Fuzz Targets"))}</strong>
+          ${renderParagraphList(review.fuzz_targets || [], "No fuzz targets generated.")}
+        </article>
+      </div>
+      <article class="action-card">
+        <strong>${escapeHtml(t("Dependency Notes"))}</strong>
+        ${renderParagraphList(review.dependency_notes || [], "No dependency notes generated.")}
+      </article>
+      <div class="two-column ai-detail-grid">
+        <article class="action-card">
+          <strong>${escapeHtml(t("Crash Clusters"))}</strong>
+          ${renderParagraphList(review.crash_clusters || [], "No crash clusters generated.")}
+        </article>
+        <article class="action-card">
+          <strong>${escapeHtml(t("Runtime Explanations"))}</strong>
+          ${renderParagraphList(review.runtime_explanations || [], "No runtime explanations generated.")}
+        </article>
+        <article class="action-card">
+          <strong>${escapeHtml(t("Patch Candidates"))}</strong>
+          ${renderParagraphList(review.patch_candidates || [], "No patch candidates generated.")}
+        </article>
+        <article class="action-card">
+          <strong>${escapeHtml(t("Regression Tests"))}</strong>
+          ${renderParagraphList(review.regression_tests || [], "No regression tests generated.")}
         </article>
       </div>
       <p class="empty-state">${escapeHtml(review.reason || "")}</p>
     `;
+  }
+
+  function renderAiPlaybooks(aiBackend) {
+    return (aiBackend?.playbooks || [])
+      .map(function (playbook) {
+        return `
+          <article class="reference-item">
+            <strong>${escapeHtml(t(playbook.title || ""))}</strong>
+            <p>${escapeHtml(t("Used when"))}: ${escapeHtml(t(playbook.used_when || ""))}</p>
+            <small>${escapeHtml(t("Output"))}: ${escapeHtml(t(playbook.output || ""))}</small>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderIntegrationSummary(integrations) {
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Enabled integrations"))}</span>
+        <strong>${escapeHtml(integrations.enabled_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Webhook events"))}</span>
+        <strong>${escapeHtml((integrations.recent_events || []).length)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Updated"))}</span>
+        <strong>${escapeHtml(integrations.updated_at || t("pending"))}</strong>
+      </div>
+    `;
+  }
+
+  function renderIntegrationEvents(integrations) {
+    const events = integrations.recent_events || [];
+    if (!events.length) {
+      return `<p class="empty-state">${escapeHtml(t("No webhook events were captured yet."))}</p>`;
+    }
+    return events
+      .map(function (event) {
+        return `
+          <article class="reference-item">
+            <strong>${escapeHtml(valueLabel("integration_provider", event.provider || "manual"))}</strong>
+            <p>${escapeHtml(event.id || "")}</p>
+            <small>${escapeHtml(event.received_at || "")}</small>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderIntegrationExamples(integrations) {
+    return Object.entries(integrations.examples || {})
+      .map(function ([key, value]) {
+        return `# ${key}\n${value}`;
+      })
+      .join("\n\n");
   }
 
   function renderExecution(job) {
@@ -453,9 +558,43 @@
     if (!findings.length) {
       return `<p class="empty-state">${escapeHtml(t("No findings yet."))}</p>`;
     }
+    const projectKey = job.project_key || job.metadata?.project_key || "";
+    const reviewOptions = [
+      ["open", valueLabel("review_state", "open")],
+      ["accepted-risk", valueLabel("review_state", "accepted-risk")],
+      ["false-positive", valueLabel("review_state", "false-positive")],
+      ["muted", valueLabel("review_state", "muted")],
+      ["fixed-intended", valueLabel("review_state", "fixed-intended")],
+    ];
     return findings
       .map(
-        (finding) => `
+        (finding) => {
+          const reviewForm = finding.fingerprint
+            ? `
+              <form class="finding-review-form" data-finding-review-form data-project-key="${escapeHtml(projectKey)}" data-fingerprint="${escapeHtml(finding.fingerprint)}">
+                <label>
+                  <span>${escapeHtml(t("Review state"))}</span>
+                  <select name="review_state">
+                    ${reviewOptions
+                      .map(([value, label]) => `<option value="${escapeHtml(value)}" ${finding.review_state === value ? "selected" : ""}>${escapeHtml(label)}</option>`)
+                      .join("")}
+                  </select>
+                </label>
+                <label>
+                  <span>${escapeHtml(t("Operator note"))}</span>
+                  <input type="text" name="review_note" value="${escapeHtml(finding.review_note || "")}">
+                </label>
+                <label>
+                  <span>${escapeHtml(t("Mute until"))}</span>
+                  <input type="datetime-local" name="muted_until" value="${escapeHtml((finding.muted_until || "").slice(0, 16))}">
+                </label>
+                <div class="reference-actions">
+                  <button type="submit" class="button-secondary">${escapeHtml(t("Save decision"))}</button>
+                </div>
+              </form>
+            `
+            : `<p class="empty-state">${escapeHtml(t("Review state controls are available after findings are fingerprinted."))}</p>`;
+          return `
           <article class="finding-card severity-${escapeHtml(finding.severity)}">
             <div class="job-card-top">
               <strong>${escapeHtml(finding.title)}</strong>
@@ -464,11 +603,17 @@
             <p class="finding-meta">
               ${escapeHtml(valueLabel("category", finding.category))}${finding.path ? ` | ${escapeHtml(finding.path)}` : ""}${finding.line ? `:${escapeHtml(finding.line)}` : ""}
             </p>
+            <div class="tag-row">
+              <span class="tag tag-soft">${escapeHtml(t("Lifecycle"))}: ${escapeHtml(valueLabel("lifecycle_state", finding.lifecycle_state || "new"))}</span>
+              <span class="tag">${escapeHtml(t("Review state"))}: ${escapeHtml(valueLabel("review_state", finding.review_state || "open"))}</span>
+            </div>
             <p>${escapeHtml(finding.description)}</p>
             ${finding.references?.length ? `<div class="reference-list compact">${renderReferenceCards(finding.references.slice(0, 4), "")}</div>` : ""}
             ${finding.recommendation ? `<small>${escapeHtml(finding.recommendation)}</small>` : ""}
+            ${reviewForm}
           </article>
-        `
+        `;
+        }
       )
       .join("");
   }
@@ -514,6 +659,26 @@
         <button type="submit" class="${escapeHtml(buttonClass)}">${escapeHtml(labelText)}</button>
       </form>
     `;
+  }
+
+  function showActionNotice(form, message, kind = "info") {
+    let notice = form.querySelector("[data-action-notice]");
+    if (!notice) {
+      notice = document.createElement("small");
+      notice.setAttribute("data-action-notice", "true");
+      notice.className = "action-notice";
+      form.appendChild(notice);
+    }
+    notice.classList.toggle("action-notice-error", kind === "error");
+    notice.classList.toggle("action-notice-success", kind === "success");
+    notice.textContent = message;
+  }
+
+  function messageFromActionPayload(payload, fallback) {
+    if (payload && typeof payload.message === "string" && payload.message.trim()) {
+      return payload.message.trim();
+    }
+    return fallback;
   }
 
   function renderDashboardJobCard(job) {
@@ -603,13 +768,36 @@
             </div>
           `;
         }
+        const installJob = tool.install_job || {};
+        const jobStatus = installJob.status || "";
+        const installProgress = Number(installJob.progress || 0);
+        const installJobMarkup = ["queued", "running", "failed"].includes(jobStatus)
+          ? `
+            <div class="download-progress">
+              <div class="progress-track compact">
+                <div class="progress-bar ${jobStatus === "running" ? "progress-bar-active" : ""}" style="width: ${installProgress}%"></div>
+              </div>
+              <small class="download-progress-meta">${escapeHtml(t(installJob.message || jobStatus))}</small>
+              ${(installJob.logs || []).slice(-3).length
+                ? `<pre class="log-box compact-log">${escapeHtml((installJob.logs || []).slice(-3).join("\n"))}</pre>`
+                : ""}
+            </div>
+          `
+          : "";
         const installForm = tool.installable
-          ? renderSettingsActionForm(
-              `/tools/install/${tool.key}`,
-              `/api/tools/install/${tool.key}`,
-              t("Install"),
-              `<input type="hidden" name="next_url" value="${escapeHtml(window.location.pathname + window.location.search)}">`
-            ).replace("<form ", '<form class="tool-install-form" ')
+          ? (() => {
+              const packageInputs = (tool.packages || [])
+                .map((item) => `<input type="hidden" name="packages" value="${escapeHtml(item)}">`)
+                .join("");
+              return renderSettingsActionForm(
+                `/tools/install/${tool.key}`,
+                `/api/tools/install/${tool.key}`,
+                t("Install"),
+                `<input type="hidden" name="next_url" value="${escapeHtml(window.location.pathname + window.location.search)}"><input type="hidden" name="confirmed" value="1">${packageInputs}`
+              )
+                .replace("<form ", '<form class="tool-install-form" ')
+                .replace("<form ", `<form data-dry-run-endpoint="/api/tools/install/${tool.key}/dry-run" `);
+            })()
           : "";
         return `
           <div class="tool-row tool-row-missing">
@@ -620,6 +808,7 @@
             <div class="tool-actions">
               <div class="tool-install-slot">
                 <span class="status status-skipped">${escapeHtml(t("not installed"))}</span>
+                ${installJobMarkup}
                 ${installForm}
               </div>
             </div>
@@ -629,12 +818,39 @@
       .join("");
   }
 
+  function renderToolPreflight(preflight, installJobs) {
+    const privilege = preflight?.privilege || {};
+    const jobs = installJobs || [];
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Package manager"))}</span>
+        <strong>${escapeHtml(preflight?.package_manager || t("unknown"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Privilege runner"))}</span>
+        <strong>${escapeHtml(t(privilege.mode || "none"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Preflight issues"))}</span>
+        <strong>${escapeHtml((preflight?.issues || []).length)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Warnings"))}</span>
+        <strong>${escapeHtml((preflight?.warnings || []).length)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Install jobs"))}</span>
+        <strong>${escapeHtml(jobs.length)}</strong>
+      </div>
+    `;
+  }
+
   function aiCopyText(aiBackend) {
-    if (aiBackend?.configured) {
-      return t("Remote AI review is configured and will augment the scan reports.");
-    }
     if (aiBackend?.mode === "local-llm") {
       return t("A downloaded local model is ready and will be used for AI-assisted review.");
+    }
+    if (aiBackend?.mode === "remote-ai") {
+      return t("Remote AI review is configured and will augment the scan reports.");
     }
     return t("Remote AI review is not configured, so the portal will generate a deterministic local review instead.");
   }
@@ -644,7 +860,7 @@
     return `
       <div class="summary-card">
         <span>${escapeHtml(t("Mode"))}</span>
-        <strong>${escapeHtml(aiBackend?.mode || "local-fallback")}</strong>
+        <strong>${escapeHtml(t(aiBackend?.mode || "local-fallback"))}</strong>
       </div>
       <div class="summary-card">
         <span>${escapeHtml(t("Worker mode"))}</span>
@@ -652,7 +868,7 @@
       </div>
       <div class="summary-card">
         <span>${escapeHtml(t("Provider"))}</span>
-        <strong>${escapeHtml(aiBackend?.provider || "scanforge-local")}</strong>
+        <strong>${escapeHtml(t(aiBackend?.provider || "scanforge-local"))}</strong>
       </div>
       <div class="summary-card">
         <span>${escapeHtml(t("Model"))}</span>
@@ -660,7 +876,7 @@
       </div>
       <div class="summary-card">
         <span>${escapeHtml(t("Status"))}</span>
-        <strong>${escapeHtml(t(aiBackend?.configured ? "ready" : "fallback"))}</strong>
+        <strong>${escapeHtml(t(aiBackend?.mode === "remote-ai" || aiBackend?.mode === "local-llm" ? "ready" : "fallback"))}</strong>
       </div>
       <div class="summary-card">
         <span>${escapeHtml(t("Local runner"))}</span>
@@ -671,6 +887,46 @@
         <strong>${escapeHtml(installedCount)}</strong>
       </div>
     `;
+  }
+
+  function renderAiDiagnostics(aiBackend) {
+    const routingOptions = aiBackend?.routing_options || [];
+    const activeRouting = routingOptions.find((item) => item.id === aiBackend?.settings?.routing_mode);
+    const modelOptions = aiBackend?.local_model_options || [];
+    const activeModel = modelOptions.find((item) => item.id === aiBackend?.settings?.preferred_local_model);
+    return `
+      <article class="reference-item">
+        <strong>${escapeHtml(t("Routing mode"))}</strong>
+        <p>${escapeHtml(t(activeRouting?.label || aiBackend?.settings?.routing_mode || "Auto"))}</p>
+        <small>${escapeHtml(aiBackend?.routing_reason || "")}</small>
+      </article>
+      <article class="reference-item">
+        <strong>${escapeHtml(t("Remote endpoint"))}</strong>
+        <p><code>${escapeHtml(aiBackend?.settings?.url || t("not configured"))}</code></p>
+        <small>${escapeHtml(t("Configuration source"))}: ${escapeHtml(t(aiBackend?.settings?.source || "environment"))}</small>
+      </article>
+      <article class="reference-item">
+        <strong>${escapeHtml(t("Preferred local model"))}</strong>
+        <p>${escapeHtml(t(activeModel?.label || aiBackend?.settings?.preferred_local_model || "Automatic selection"))}</p>
+        <small>${escapeHtml(t("API key"))}: ${escapeHtml(t(aiBackend?.settings?.api_key_configured ? "configured" : "not configured"))}</small>
+      </article>
+    `;
+  }
+
+  function renderAiProbeResult(probe) {
+    if (!probe) return "";
+    const remoteStatus = probe.remote?.configured
+      ? (probe.remote?.ok ? t("ready") : (probe.remote?.message || t("not configured")))
+      : t("not configured");
+    const localStatus = probe.local?.runner_available
+      ? (probe.local?.model_available ? t("ready") : (probe.local?.message || t("not configured")))
+      : (probe.local?.message || t("not installed"));
+    return [
+      `${t("Mode")}: ${probe.mode || "local-fallback"}`,
+      `${t("Remote backend")}: ${remoteStatus}`,
+      `${t("Local runner")}: ${localStatus}`,
+      `${t("Routing reason")}: ${probe.routing_reason || ""}`,
+    ].filter(Boolean).join(" | ");
   }
 
   function renderModelDownloadState(model) {
@@ -831,6 +1087,405 @@
     `;
   }
 
+  function renderEnvironmentSummary(environment) {
+    const venvLabel = environment?.project_venv?.active
+      ? t("active")
+      : (environment?.project_venv?.exists ? t("ready") : t("missing"));
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Status"))}</span>
+        <strong>${escapeHtml(t(environment?.current_runtime_ready ? "ready" : "needs bootstrap"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Python"))}</span>
+        <strong>${escapeHtml(environment?.python_version || "")}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Virtual environment"))}</span>
+        <strong>${escapeHtml(venvLabel)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml("pip")}</span>
+        <strong>${escapeHtml(t(environment?.pip_available ? "ready" : "missing"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Requirements"))}</span>
+        <strong>${escapeHtml(environment?.requirements_satisfied || 0)}/${escapeHtml(environment?.requirements_total || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Package manager"))}</span>
+        <strong>${escapeHtml(environment?.package_manager || t("unknown"))}</strong>
+      </div>
+    `;
+  }
+
+  function renderEnvironmentDetails(environment) {
+    const issues = environment?.issues || [];
+    const issuesCard = issues.length
+      ? `
+        <article class="reference-item">
+          <strong>${escapeHtml(t("Detected issues"))}</strong>
+          <p>${escapeHtml(t("Run the bootstrap command first if any Python dependency is missing or the project venv has not been created yet."))}</p>
+          <small>${escapeHtml(issues.join(" | "))}</small>
+        </article>
+      `
+      : `
+        <article class="reference-item">
+          <strong>${escapeHtml(t("Detected issues"))}</strong>
+          <p>${escapeHtml(t("No blocking Python environment issues were detected."))}</p>
+          <small>${escapeHtml(t("Bootstrap is still recommended when you want ScanForge to use the project-local .venv."))}</small>
+        </article>
+      `;
+    return `
+      <article class="reference-item">
+        <strong>${escapeHtml(t("Current runtime"))}</strong>
+        <p><code>${escapeHtml(environment?.python_executable || "")}</code></p>
+        <small>${escapeHtml(t("Project root"))}: <code>${escapeHtml(environment?.project_root || "")}</code></small>
+      </article>
+      <article class="reference-item">
+        <strong>${escapeHtml(t("Bootstrap command"))}</strong>
+        <p><code>${escapeHtml(environment?.bootstrap_command || "./scripts/setup-scanforge.sh")}</code></p>
+        <small>${escapeHtml(t("Preflight command"))}: <code>${escapeHtml(environment?.preflight_command || "./scripts/scanforge-preflight.sh")}</code></small>
+      </article>
+      <article class="reference-item">
+        <strong>${escapeHtml(t("Virtual environment"))}</strong>
+        <p><code>${escapeHtml(environment?.project_venv?.path || "")}</code></p>
+        <small>${escapeHtml(t("Python"))}: <code>${escapeHtml(environment?.project_venv?.python_path || "")}</code></small>
+      </article>
+      ${issuesCard}
+    `;
+  }
+
+  function renderSecuritySummary(system) {
+    const uploadLimits = system.upload_limits || {};
+    const authStatus = system.auth_status || {};
+    const currentAuth = system.current_auth || {};
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Authentication"))}</span>
+        <strong>${escapeHtml(t(authStatus.enabled ? "enabled" : "disabled"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Auth setup"))}</span>
+        <strong>${escapeHtml(t(authStatus.source || "disabled"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Current role"))}</span>
+        <strong>${escapeHtml(t(currentAuth.role || "admin"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Upload files"))}</span>
+        <strong>${escapeHtml(uploadLimits.max_files || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Upload size"))}</span>
+        <strong>${escapeHtml(formatBytes(uploadLimits.max_bytes || 0))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Stale job recovery"))}</span>
+        <strong>${escapeHtml(t("enabled"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Runtime log dir"))}</span>
+        <strong>${escapeHtml(system.runtime_logs?.log_dir || "")}</strong>
+      </div>
+    `;
+  }
+
+  function renderNetworkSummary(system) {
+    const network = system.network || {};
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Bind address"))}</span>
+        <strong>${escapeHtml(network.bind_host || "")}:${escapeHtml(network.bind_port || "")}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("LAN URLs"))}</span>
+        <strong>${escapeHtml((network.lan_urls || []).length)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Allowed hosts"))}</span>
+        <strong>${escapeHtml(t(network.allowed_hosts_configured ? "configured" : "open"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("CORS"))}</span>
+        <strong>${escapeHtml(t(network.cors_enabled ? "enabled" : "disabled"))}</strong>
+      </div>
+    `;
+  }
+
+  function renderNetworkAddresses(network) {
+    const urls = network?.lan_urls || [];
+    const allowedHosts = network?.allowed_hosts || [];
+    const corsOrigins = network?.cors_origins || [];
+    const warnings = network?.warnings || [];
+    return `
+      <article class="reference-item">
+        <strong>${escapeHtml(t("LAN access URLs"))}</strong>
+        ${urls.length
+          ? `<p>${urls.map((url) => `<code>${escapeHtml(url)}</code>`).join("<br>")}</p>`
+          : `<small>${escapeHtml(t("No LAN URLs detected for the current bind address."))}</small>`}
+      </article>
+      <article class="reference-item">
+        <strong>${escapeHtml(t("Allowed hosts"))}</strong>
+        <p><code>${escapeHtml(allowedHosts.length ? allowedHosts.join(", ") : "*")}</code></p>
+        <small>QA_PORTAL_ALLOWED_HOSTS</small>
+      </article>
+      <article class="reference-item">
+        <strong>${escapeHtml(t("CORS origins"))}</strong>
+        <p><code>${escapeHtml(corsOrigins.length ? corsOrigins.join(", ") : t("none"))}</code></p>
+        <small>QA_PORTAL_CORS_ORIGINS</small>
+      </article>
+      ${warnings.length
+        ? `<article class="reference-item">
+            <strong>${escapeHtml(t("Network warnings"))}</strong>
+            <p>${escapeHtml(warnings.join(" | "))}</p>
+          </article>`
+        : ""}
+    `;
+  }
+
+  function renderRuntimeLogs(runtimeLogs) {
+    const logs = runtimeLogs?.logs || [];
+    if (!logs.length) {
+      return `<p class="empty-state">${escapeHtml(t("No log lines available yet."))}</p>`;
+    }
+    return logs.map(function (log) {
+      const lines = (log.lines || []).join("\n");
+      return `
+        <article class="reference-item">
+          <strong>${escapeHtml(t(log.label || log.key || "Log"))}</strong>
+          <p><code>${escapeHtml(log.path || "")}</code></p>
+          ${lines
+            ? `<pre class="log-box compact-log">${escapeHtml(lines)}</pre>`
+            : `<small>${escapeHtml(t("No log lines available yet."))}</small>`}
+        </article>
+      `;
+    }).join("");
+  }
+
+  function renderCiContext(job) {
+    const ci = job.metadata?.ci_context || {};
+    const runtime = job.metadata?.service_runtime_request_public || {};
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Integration provider"))}</span>
+        <strong>${escapeHtml(valueLabel("integration_provider", ci.integration_provider || "manual"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Repository"))}</span>
+        <strong>${escapeHtml(ci.repository_url || t("none"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Branch"))}</span>
+        <strong>${escapeHtml(ci.branch || t("none"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Commit"))}</span>
+        <strong>${escapeHtml(ci.commit_sha || t("none"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Pipeline"))}</span>
+        <strong>${escapeHtml(ci.pipeline_url || t("none"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Merge request"))}</span>
+        <strong>${escapeHtml(ci.merge_request || t("none"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Runtime target URL"))}</span>
+        <strong>${escapeHtml(runtime.target_url || t("none"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Verification profile"))}</span>
+        <strong>${escapeHtml(t(runtime.service_runtime_profile || runtime.verification_profile || "passive"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Authentication"))}</span>
+        <strong>${escapeHtml(t(runtime.auth_mode_requested || "none"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Request timeout, seconds"))}</span>
+        <strong>${escapeHtml(runtime.request_timeout_seconds || 3)}</strong>
+      </div>
+    `;
+  }
+
+  function renderDependencySummary(job) {
+    const dependencies = job.metadata?.dependencies || {};
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Component count"))}</span>
+        <strong>${escapeHtml(dependencies.component_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Dependency manifests"))}</span>
+        <strong>${escapeHtml(dependencies.manifest_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Lockfiles"))}</span>
+        <strong>${escapeHtml(dependencies.lockfile_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Resolved components"))}</span>
+        <strong>${escapeHtml(dependencies.resolved_component_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Transitive components"))}</span>
+        <strong>${escapeHtml(dependencies.transitive_component_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Ecosystems"))}</span>
+        <strong>${escapeHtml(Object.keys(dependencies.ecosystem_counts || {}).length)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Dependency flags"))}</span>
+        <strong>${escapeHtml(Object.keys(dependencies.flag_counts || {}).length)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("License gaps"))}</span>
+        <strong>${escapeHtml(dependencies.license_gap_count || 0)}</strong>
+      </div>
+    `;
+  }
+
+  function renderDependencyManifests(job) {
+    const dependencies = job.metadata?.dependencies || {};
+    const manifests = dependencies.manifests || [];
+    if (!manifests.length) {
+      return `<p class="empty-state">${escapeHtml(t("No dependency manifests were detected for this run."))}</p>`;
+    }
+    return manifests
+      .slice(0, 8)
+      .map(function (manifest) {
+        return `
+          <article class="reference-item">
+            <strong>${escapeHtml(manifest.path || "")}</strong>
+            <p>${escapeHtml(manifest.kind || "")} · ${escapeHtml(manifest.component_count || 0)} · ${escapeHtml(manifest.role || "manifest")}</p>
+            <small>${escapeHtml(manifest.license || t("none"))}</small>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderDependencyFlags(job) {
+    const dependencies = job.metadata?.dependencies || {};
+    const tags = [];
+    for (const [ecosystem, count] of Object.entries(dependencies.ecosystem_counts || {})) {
+      tags.push(`<span class="tag tag-soft">${escapeHtml(ecosystem)}: ${escapeHtml(count)}</span>`);
+    }
+    for (const [flag, count] of Object.entries(dependencies.flag_counts || {})) {
+      tags.push(`<span class="tag">${escapeHtml(flag)}: ${escapeHtml(count)}</span>`);
+    }
+    return tags.join("");
+  }
+
+  function renderDynamicSummary(job) {
+    const dynamic = job.metadata?.dynamic_analysis || {};
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("Eligible"))}</span>
+        <strong>${escapeHtml(t(dynamic.eligible ? "yes" : "no"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Sanitizer configured"))}</span>
+        <strong>${escapeHtml(t(dynamic.sanitizer_configured ? "yes" : "no"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Sanitizer built"))}</span>
+        <strong>${escapeHtml(t(dynamic.sanitizer_built ? "yes" : "no"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Instrumented tests"))}</span>
+        <strong>${escapeHtml(t(dynamic.sanitizer_tests_ran ? "yes" : "no"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Build system"))}</span>
+        <strong>${escapeHtml((job.metadata?.project?.build_systems || []).join(", ") || t("none"))}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Valgrind</span>
+        <strong>${escapeHtml(t(dynamic.valgrind_available ? "yes" : "no"))}</strong>
+      </div>
+    `;
+  }
+
+  function renderDynamicLogs(job) {
+    const dynamic = job.metadata?.dynamic_analysis || {};
+    if (!dynamic.report) {
+      return `<p class="empty-state">${escapeHtml(t("Dynamic analysis was not eligible for this job."))}</p>`;
+    }
+    return `
+      <article class="reference-item">
+        <strong>${escapeHtml(t("Run log"))}</strong>
+        <p>${escapeHtml(dynamic.report)}</p>
+        <small>${escapeHtml(t("Dynamic analysis"))}</small>
+      </article>
+    `;
+  }
+
+  function renderLifecycleSummary(job) {
+    const lifecycle = job.metadata?.finding_lifecycle || {};
+    return `
+      <div class="summary-card">
+        <span>${escapeHtml(t("New findings"))}</span>
+        <strong>${escapeHtml(lifecycle.new_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Persisting findings"))}</span>
+        <strong>${escapeHtml(lifecycle.persisting_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Fixed findings"))}</span>
+        <strong>${escapeHtml(lifecycle.fixed_count || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Tracked decisions"))}</span>
+        <strong>${escapeHtml(lifecycle.tracked_decisions || 0)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>${escapeHtml(t("Muted active"))}</span>
+        <strong>${escapeHtml(lifecycle.muted_active_count || 0)}</strong>
+      </div>
+    `;
+  }
+
+  function renderLifecycleDetails(job) {
+    const lifecycle = job.metadata?.finding_lifecycle || {};
+    const cards = [];
+    for (const item of (lifecycle.new_findings || []).slice(0, 4)) {
+      cards.push(`
+        <article class="reference-item">
+          <strong>${escapeHtml(t("New findings"))}</strong>
+          <p>${escapeHtml(item.title || "")}</p>
+          <small>${escapeHtml(item.path || "project")}</small>
+        </article>
+      `);
+    }
+    for (const item of (lifecycle.persisting_findings || []).slice(0, 4)) {
+      cards.push(`
+        <article class="reference-item">
+          <strong>${escapeHtml(t("Persisting findings"))}</strong>
+          <p>${escapeHtml(item.title || "")}</p>
+          <small>${escapeHtml(item.path || "project")}</small>
+        </article>
+      `);
+    }
+    for (const item of (lifecycle.fixed_findings || []).slice(0, 4)) {
+      cards.push(`
+        <article class="reference-item">
+          <strong>${escapeHtml(t("Fixed findings"))}</strong>
+          <p>${escapeHtml(item.title || "")}</p>
+          <small>${escapeHtml(item.path || "project")}</small>
+        </article>
+      `);
+    }
+    return cards.length
+      ? cards.join("")
+      : `<p class="empty-state">${escapeHtml(t("No lifecycle baseline was available yet."))}</p>`;
+  }
+
   function renderHardwareGpuList(system) {
     const gpus = system.hardware?.gpus || [];
     if (!gpus.length) {
@@ -889,8 +1544,29 @@
   }
 
   function updateSettingsPage(root, payload) {
+    const environmentSummary = root.querySelector("[data-environment-summary]");
+    if (environmentSummary) environmentSummary.innerHTML = renderEnvironmentSummary(payload.environment || {});
+
+    const environmentDetails = root.querySelector("[data-environment-details]");
+    if (environmentDetails) environmentDetails.innerHTML = renderEnvironmentDetails(payload.environment || {});
+
     const toolList = root.querySelector("[data-tool-list]");
     if (toolList) toolList.innerHTML = renderToolInventory(payload.tool_inventory || []);
+
+    const toolPreflight = root.querySelector("[data-tool-preflight]");
+    if (toolPreflight) toolPreflight.innerHTML = renderToolPreflight(payload.tool_install_preflight || {}, payload.tool_install_jobs || []);
+
+    const securitySummary = root.querySelector("[data-security-summary]");
+    if (securitySummary) securitySummary.innerHTML = renderSecuritySummary(payload || {});
+
+    const networkSummary = root.querySelector("[data-network-summary]");
+    if (networkSummary) networkSummary.innerHTML = renderNetworkSummary(payload || {});
+
+    const networkAddresses = root.querySelector("[data-network-addresses]");
+    if (networkAddresses) networkAddresses.innerHTML = renderNetworkAddresses(payload.network || {});
+
+    const runtimeLogs = root.querySelector("[data-runtime-logs]");
+    if (runtimeLogs) runtimeLogs.innerHTML = renderRuntimeLogs(payload.runtime_logs || {});
 
     const aiSummary = root.querySelector("[data-ai-summary]");
     if (aiSummary) aiSummary.innerHTML = renderAiSummary(payload.ai_backend || {}, payload.worker_mode || "");
@@ -898,8 +1574,14 @@
     const aiCopy = root.querySelector("[data-ai-copy]");
     if (aiCopy) aiCopy.textContent = aiCopyText(payload.ai_backend || {});
 
+    const aiDiagnostics = root.querySelector("[data-ai-diagnostics]");
+    if (aiDiagnostics) aiDiagnostics.innerHTML = renderAiDiagnostics(payload.ai_backend || {});
+
     const aiModels = root.querySelector("[data-ai-model-list]");
     if (aiModels) aiModels.innerHTML = renderAiModelList(payload.ai_backend || { default_model: {}, local_models: [] });
+
+    const aiPlaybooks = root.querySelector("[data-ai-playbooks]");
+    if (aiPlaybooks) aiPlaybooks.innerHTML = renderAiPlaybooks(payload.ai_backend || {});
 
     const kbSummary = root.querySelector("[data-kb-summary]");
     if (kbSummary) kbSummary.innerHTML = renderSystemKnowledgeBaseSummary(payload.knowledge_base || {});
@@ -921,6 +1603,15 @@
 
     const gpuList = root.querySelector("[data-gpu-list]");
     if (gpuList) gpuList.innerHTML = renderHardwareGpuList(payload);
+
+    const integrationSummary = root.querySelector("[data-integration-summary]");
+    if (integrationSummary) integrationSummary.innerHTML = renderIntegrationSummary(payload.integrations || {});
+
+    const integrationEvents = root.querySelector("[data-integration-events]");
+    if (integrationEvents) integrationEvents.innerHTML = renderIntegrationEvents(payload.integrations || {});
+
+    const integrationExamples = root.querySelector("[data-integration-examples]");
+    if (integrationExamples) integrationExamples.textContent = renderIntegrationExamples(payload.integrations || {});
   }
 
   function shouldPollDashboard(payload) {
@@ -928,7 +1619,67 @@
   }
 
   function shouldPollSettings(payload) {
-    return Boolean(payload.ai_backend?.downloads_running) || Boolean(payload.knowledge_base?.sync?.running);
+    const installRunning = (payload.tool_install_jobs || []).some((job) => ["queued", "running"].includes(job.status));
+    return Boolean(payload.ai_backend?.downloads_running) || Boolean(payload.knowledge_base?.sync?.running) || installRunning;
+  }
+
+  async function submitToolInstallForm(form, refreshFn) {
+    const apiEndpoint = form.dataset.apiEndpoint || form.getAttribute("action");
+    const dryRunEndpoint = form.dataset.dryRunEndpoint || `${apiEndpoint}/dry-run`;
+    if (!apiEndpoint || !dryRunEndpoint) return;
+
+    const submitButton = form.querySelector('button[type="submit"]');
+    form.classList.add("is-pending");
+    if (submitButton) submitButton.disabled = true;
+    showActionNotice(form, t("Preparing package dry-run..."));
+    try {
+      const dryRunResponse = await fetch(dryRunEndpoint, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      });
+      const dryRunPayload = await dryRunResponse.json().catch(function () { return null; });
+      if (!dryRunResponse.ok || dryRunPayload?.ok === false) {
+        showActionNotice(form, messageFromActionPayload(dryRunPayload, t("Package dry-run failed.")), "error");
+        return;
+      }
+      const packages = dryRunPayload?.packages || dryRunPayload?.preflight?.tool?.packages || [];
+      if (dryRunPayload?.confirmation_required) {
+        const packageList = packages.length ? packages.join(", ") : t("no packages");
+        const commandList = (dryRunPayload.commands || []).join("\n");
+        const confirmed = window.confirm(
+          `${t("Install packages")}: ${packageList}${commandList ? `\n\n${commandList}` : ""}`
+        );
+        if (!confirmed) {
+          showActionNotice(form, t("Installation cancelled."), "info");
+          return;
+        }
+      }
+
+      showActionNotice(form, t("Queueing installation..."));
+      const response = await fetch(apiEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          confirmed: true,
+          packages,
+        }),
+      });
+      const payload = await response.json().catch(function () { return null; });
+      if (!response.ok || payload?.ok === false) {
+        showActionNotice(form, messageFromActionPayload(payload, t("Action failed.")), "error");
+        return;
+      }
+      showActionNotice(form, messageFromActionPayload(payload, t("Installation queued.")), "success");
+      await refreshFn();
+    } catch (_error) {
+      showActionNotice(form, t("Action failed."), "error");
+    } finally {
+      form.classList.remove("is-pending");
+      if (submitButton) submitButton.disabled = false;
+    }
   }
 
   function initAsyncForms(root, attributeName, refreshFn) {
@@ -941,21 +1692,224 @@
       if (!form.hasAttribute(attributeName)) return;
       event.preventDefault();
 
+      if (form.classList.contains("tool-install-form")) {
+        await submitToolInstallForm(form, refreshFn);
+        return;
+      }
+
       const apiEndpoint = form.dataset.apiEndpoint || form.getAttribute("action");
       if (!apiEndpoint) return;
 
       form.classList.add("is-pending");
       const submitButton = form.querySelector('button[type="submit"]');
       if (submitButton) submitButton.disabled = true;
+      showActionNotice(form, t(form.classList.contains("tool-install-form") ? "Installing..." : "Applying..."));
       try {
         const response = await fetch(apiEndpoint, {
+          method: "POST",
+          headers: { Accept: "application/json" },
+        });
+        const payload = await response.json().catch(function () { return null; });
+        if (!response.ok) {
+          showActionNotice(form, messageFromActionPayload(payload, `Action failed with status ${response.status}`), "error");
+          return;
+        }
+        if (payload?.ok === false) {
+          showActionNotice(form, messageFromActionPayload(payload, t("Action failed.")), "error");
+          return;
+        }
+        showActionNotice(form, messageFromActionPayload(payload, t("Done.")), "success");
+        await refreshFn();
+      } catch (_error) {
+        showActionNotice(form, t("Action failed."), "error");
+      } finally {
+        form.classList.remove("is-pending");
+        if (submitButton) submitButton.disabled = false;
+      }
+    });
+  }
+
+  function initIntegrationConfigForms(root, refreshFn) {
+    if (root.hasAttribute("data-integration-forms-bound")) return;
+    root.setAttribute("data-integration-forms-bound", "true");
+    root.addEventListener("submit", async function (event) {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (!form.hasAttribute("data-integration-config-form")) return;
+      event.preventDefault();
+
+      const providerKey = form.dataset.providerKey || "";
+      if (!providerKey) return;
+
+      const payload = {
+        providers: {
+          [providerKey]: {
+            enabled: Boolean(form.querySelector('[data-field="enabled"]')?.checked),
+            base_url: form.querySelector('[data-field="base_url"]')?.value || "",
+            token: form.querySelector('[data-field="token"]')?.value || "",
+            webhook_secret: form.querySelector('[data-field="webhook_secret"]')?.value || "",
+            default_mode: form.querySelector('[data-field="default_mode"]')?.value || "full_scan",
+            default_preset: form.querySelector('[data-field="default_preset"]')?.value || "balanced",
+          },
+        },
+      };
+
+      const submitButton = form.querySelector('button[type="submit"]');
+      form.classList.add("is-pending");
+      if (submitButton) submitButton.disabled = true;
+      try {
+        const response = await fetch("/api/integrations/config", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          throw new Error(`Action failed with status ${response.status}`);
+        }
+        await refreshFn();
+      } catch (_error) {
+        window.location.reload();
+      } finally {
+        form.classList.remove("is-pending");
+        if (submitButton) submitButton.disabled = false;
+      }
+    });
+  }
+
+  function initAiConfigForms(root, refreshFn) {
+    if (root.hasAttribute("data-ai-config-bound")) return;
+    root.setAttribute("data-ai-config-bound", "true");
+    root.addEventListener("submit", async function (event) {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (!form.hasAttribute("data-ai-config-form")) return;
+      event.preventDefault();
+
+      const payload = {
+        enabled: Boolean(form.querySelector('[data-field="enabled"]')?.checked),
+        provider: form.querySelector('[data-field="provider"]')?.value || "openai-compatible",
+        url: form.querySelector('[data-field="url"]')?.value || "",
+        model: form.querySelector('[data-field="model"]')?.value || "",
+        timeout_seconds: Number(form.querySelector('[data-field="timeout_seconds"]')?.value || 30),
+        routing_mode: form.querySelector('[data-field="routing_mode"]')?.value || "auto",
+        preferred_local_model: form.querySelector('[data-field="preferred_local_model"]')?.value || "auto",
+      };
+      const apiKey = form.querySelector('[data-field="api_key"]')?.value || "";
+      if (apiKey.trim()) payload.api_key = apiKey;
+
+      const submitButton = form.querySelector('button[type="submit"]');
+      form.classList.add("is-pending");
+      if (submitButton) submitButton.disabled = true;
+      try {
+        const response = await fetch("/api/assistant/config", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          throw new Error(`Action failed with status ${response.status}`);
+        }
+        const apiKeyInput = form.querySelector('[data-field="api_key"]');
+        if (apiKeyInput) apiKeyInput.value = "";
+        await refreshFn();
+      } catch (_error) {
+        window.location.reload();
+      } finally {
+        form.classList.remove("is-pending");
+        if (submitButton) submitButton.disabled = false;
+      }
+    });
+
+    root.addEventListener("click", async function (event) {
+      const trigger = event.target;
+      if (!(trigger instanceof HTMLElement)) return;
+      if (!trigger.hasAttribute("data-ai-probe-trigger")) return;
+      event.preventDefault();
+      const resultBox = root.querySelector("[data-ai-probe-result]");
+      trigger.setAttribute("disabled", "disabled");
+      if (resultBox) {
+        resultBox.hidden = false;
+        resultBox.textContent = t("Probing AI backend...");
+      }
+      try {
+        const response = await fetch("/api/assistant/probe", {
           method: "POST",
           headers: { Accept: "application/json" },
         });
         if (!response.ok) {
           throw new Error(`Action failed with status ${response.status}`);
         }
+        const payload = await response.json();
+        if (resultBox) {
+          resultBox.hidden = false;
+          resultBox.textContent = renderAiProbeResult(payload);
+        }
         await refreshFn();
+      } catch (_error) {
+        if (resultBox) {
+          resultBox.hidden = false;
+          resultBox.textContent = t("AI backend probe failed.");
+        }
+      } finally {
+        trigger.removeAttribute("disabled");
+      }
+    });
+  }
+
+  function initFindingReviewForms(root) {
+    if (root.hasAttribute("data-finding-review-bound")) return;
+    root.setAttribute("data-finding-review-bound", "true");
+    root.addEventListener("submit", async function (event) {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (!form.hasAttribute("data-finding-review-form")) return;
+      event.preventDefault();
+
+      const projectKey = form.dataset.projectKey || "";
+      const fingerprint = form.dataset.fingerprint || "";
+      if (!projectKey || !fingerprint) return;
+
+      const submitButton = form.querySelector('button[type="submit"]');
+      form.classList.add("is-pending");
+      if (submitButton) submitButton.disabled = true;
+      try {
+        const response = await fetch(
+          `/api/projects/${encodeURIComponent(projectKey)}/findings/${encodeURIComponent(fingerprint)}/review`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({
+              review_state: form.querySelector('[name="review_state"]')?.value || "open",
+              review_note: form.querySelector('[name="review_note"]')?.value || "",
+              muted_until: form.querySelector('[name="muted_until"]')?.value || null,
+            }),
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`Action failed with status ${response.status}`);
+        }
+        const jobRoot = form.closest("[data-job-id]");
+        if (jobRoot?.dataset.jobId) {
+          const job = await pollJob(jobRoot.dataset.jobId);
+          if (job) {
+            updateJobPage(job);
+          }
+        } else {
+          const notice = form.querySelector("[data-review-notice]") || document.createElement("small");
+          notice.setAttribute("data-review-notice", "true");
+          notice.className = "download-progress-meta";
+          notice.textContent = t("Decision saved.");
+          form.appendChild(notice);
+        }
       } catch (_error) {
         window.location.reload();
       } finally {
@@ -1030,6 +1984,8 @@
 
     root.__refreshSettings = refresh;
     initAsyncForms(root, "data-settings-action", refresh);
+    initAiConfigForms(root, refresh);
+    initIntegrationConfigForms(root, refresh);
 
     if (timerId) window.clearTimeout(timerId);
     timerId = window.setTimeout(refresh, 2500);
@@ -1084,8 +2040,24 @@
     if (decisionSummary) decisionSummary.innerHTML = renderDecisionSummary(job);
     const nextActions = document.getElementById("next-actions");
     if (nextActions) nextActions.innerHTML = renderActions(job);
+    const ciContext = document.getElementById("ci-context-summary");
+    if (ciContext) ciContext.innerHTML = renderCiContext(job);
     const executionSummary = document.getElementById("execution-summary");
     if (executionSummary) executionSummary.innerHTML = renderExecution(job);
+    const dependencySummary = document.getElementById("dependency-summary");
+    if (dependencySummary) dependencySummary.innerHTML = renderDependencySummary(job);
+    const dependencyFlags = document.getElementById("dependency-flags");
+    if (dependencyFlags) dependencyFlags.innerHTML = renderDependencyFlags(job);
+    const dependencyManifests = document.getElementById("dependency-manifests");
+    if (dependencyManifests) dependencyManifests.innerHTML = renderDependencyManifests(job);
+    const dynamicSummary = document.getElementById("dynamic-summary");
+    if (dynamicSummary) dynamicSummary.innerHTML = renderDynamicSummary(job);
+    const dynamicLogs = document.getElementById("dynamic-logs");
+    if (dynamicLogs) dynamicLogs.innerHTML = renderDynamicLogs(job);
+    const lifecycleSummary = document.getElementById("lifecycle-summary");
+    if (lifecycleSummary) lifecycleSummary.innerHTML = renderLifecycleSummary(job);
+    const lifecycleDetails = document.getElementById("lifecycle-details");
+    if (lifecycleDetails) lifecycleDetails.innerHTML = renderLifecycleDetails(job);
     const stepsContainer = document.getElementById("steps-container");
     if (stepsContainer) stepsContainer.innerHTML = renderSteps(job);
     const severitySummary = document.getElementById("severity-summary");
@@ -1128,6 +2100,7 @@
   function initJobPage(root) {
     const jobId = root.dataset.jobId;
     if (!jobId) return;
+    initFindingReviewForms(root);
 
     let timerId = null;
 

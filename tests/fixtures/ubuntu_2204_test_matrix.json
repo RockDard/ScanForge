@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "target_os": "ubuntu-22.04",
+  "package_manager": "apt",
+  "unsupported_direct_targets": [
+    "windows",
+    "wsl",
+    "docker-desktop-windows"
+  ],
+  "check_catalog": [
+    {
+      "id": "setup-scanforge",
+      "command": "./scripts/setup-scanforge.sh",
+      "requires_linux_runtime": true,
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "run-tests",
+      "command": "./run-tests.sh",
+      "requires_linux_runtime": true,
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "web-smoke",
+      "command": "./scripts/run-web-smoke.sh",
+      "requires_linux_runtime": true,
+      "timeout_seconds": 1200
+    },
+    {
+      "id": "tool-install-unit-tests",
+      "command": "./.venv/bin/python -m unittest tests.test_tooling tests.test_portal_app",
+      "requires_linux_runtime": true,
+      "timeout_seconds": 600
+    },
+    {
+      "id": "systemd-unit-render",
+      "command": "./scripts/generate-systemd-units.sh --output-dir ./data/systemd-test",
+      "requires_linux_runtime": true,
+      "timeout_seconds": 300
+    },
+    {
+      "id": "auth-bootstrap-status",
+      "command": "python3 -m qa_portal.auth status",
+      "requires_linux_runtime": true,
+      "timeout_seconds": 60
+    },
+    {
+      "id": "tool-install-preflight",
+      "command": "python3 -m unittest tests.test_tooling",
+      "requires_linux_runtime": true,
+      "timeout_seconds": 300
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "ubuntu-22.04-root-apt",
+      "os": "ubuntu-22.04",
+      "user_context": "root",
+      "privilege_mode": "root",
+      "package_manager": "apt",
+      "expected_install_result": "allowed",
+      "env": {
+        "QA_PORTAL_HOST": "0.0.0.0",
+        "QA_PORTAL_AUTH_AUTO_SETUP": "1"
+      },
+      "check_ids": [
+        "setup-scanforge",
+        "run-tests",
+        "web-smoke",
+        "tool-install-unit-tests",
+        "systemd-unit-render",
+        "auth-bootstrap-status"
+      ]
+    },
+    {
+      "id": "ubuntu-22.04-sudo-passwordless-apt",
+      "os": "ubuntu-22.04",
+      "user_context": "non-root",
+      "privilege_mode": "sudo-passwordless",
+      "package_manager": "apt",
+      "expected_install_result": "allowed",
+      "env": {
+        "QA_PORTAL_HOST": "0.0.0.0",
+        "QA_PORTAL_AUTH_AUTO_SETUP": "1"
+      },
+      "check_ids": [
+        "setup-scanforge",
+        "run-tests",
+        "web-smoke",
+        "tool-install-unit-tests",
+        "systemd-unit-render",
+        "auth-bootstrap-status"
+      ]
+    },
+    {
+      "id": "ubuntu-22.04-sudo-password-apt",
+      "os": "ubuntu-22.04",
+      "user_context": "non-root",
+      "privilege_mode": "sudo-password",
+      "package_manager": "apt",
+      "expected_install_result": "allowed-with-password-env",
+      "env": {
+        "QA_PORTAL_HOST": "0.0.0.0",
+        "QA_PORTAL_AUTH_AUTO_SETUP": "1",
+        "SCANFORGE_SUDO_PASSWORD": "provided-by-operator"
+      },
+      "check_ids": [
+        "setup-scanforge",
+        "run-tests",
+        "web-smoke",
+        "tool-install-unit-tests",
+        "systemd-unit-render",
+        "auth-bootstrap-status"
+      ]
+    },
+    {
+      "id": "ubuntu-22.04-pkexec-apt",
+      "os": "ubuntu-22.04",
+      "user_context": "non-root",
+      "privilege_mode": "pkexec",
+      "package_manager": "apt",
+      "expected_install_result": "allowed-with-policykit",
+      "env": {
+        "QA_PORTAL_HOST": "0.0.0.0",
+        "QA_PORTAL_AUTH_AUTO_SETUP": "1"
+      },
+      "check_ids": [
+        "setup-scanforge",
+        "run-tests",
+        "web-smoke",
+        "tool-install-unit-tests",
+        "systemd-unit-render",
+        "auth-bootstrap-status"
+      ]
+    },
+    {
+      "id": "ubuntu-22.04-no-privilege-apt",
+      "os": "ubuntu-22.04",
+      "user_context": "non-root",
+      "privilege_mode": "no-privilege",
+      "package_manager": "apt",
+      "expected_install_result": "blocked-by-preflight",
+      "env": {
+        "QA_PORTAL_HOST": "127.0.0.1",
+        "QA_PORTAL_AUTH_AUTO_SETUP": "0"
+      },
+      "check_ids": [
+        "run-tests",
+        "tool-install-preflight",
+        "auth-bootstrap-status"
+      ]
+    }
+  ]
+}

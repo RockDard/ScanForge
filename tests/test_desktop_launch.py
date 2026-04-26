@@ -8,14 +8,41 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from qa_portal.runtime import CURRENT_RUNTIME_SIGNATURE
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+
+
+def _working_bash_available() -> bool:
+    try:
+        subprocess.run(
+            ["bash", "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path == "/health":
             payload = b'{"status":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        if self.path == "/api/runtime":
+            payload = (
+                '{"name":"ScanForge","runtime_signature":"%s"}'
+                % CURRENT_RUNTIME_SIGNATURE
+            ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
@@ -36,6 +63,7 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+@unittest.skipUnless(_working_bash_available(), "working bash is required for Linux desktop launcher tests")
 class DesktopLaunchTests(unittest.TestCase):
     def _write_fake_pkexec(self, temp_dir: str) -> tuple[Path, Path]:
         bin_dir = Path(temp_dir) / "bin"
@@ -53,13 +81,14 @@ class DesktopLaunchTests(unittest.TestCase):
                   : "${SCANFORGE_RUN_DIR:?}"
                   : "${FAKE_ENDPOINT_HOST:?}"
                   : "${FAKE_ENDPOINT_PORT:?}"
+                  FAKE_ENDPOINT_URL_HOST="${FAKE_ENDPOINT_URL_HOST:-$FAKE_ENDPOINT_HOST}"
                   mkdir -p "$SCANFORGE_RUN_DIR"
                   cat >"$SCANFORGE_RUN_DIR/endpoint.env" <<EOF
                 QA_PORTAL_HOST=$FAKE_ENDPOINT_HOST
                 QA_PORTAL_PORT=$FAKE_ENDPOINT_PORT
-                SCANFORGE_URL=http://$FAKE_ENDPOINT_HOST:$FAKE_ENDPOINT_PORT
+                SCANFORGE_URL=http://$FAKE_ENDPOINT_URL_HOST:$FAKE_ENDPOINT_PORT
                 EOF
-                  printf 'http://%s:%s\\n' "$FAKE_ENDPOINT_HOST" "$FAKE_ENDPOINT_PORT"
+                  printf 'http://%s:%s\\n' "$FAKE_ENDPOINT_URL_HOST" "$FAKE_ENDPOINT_PORT"
                 fi
                 """
             ),
@@ -72,8 +101,8 @@ class DesktopLaunchTests(unittest.TestCase):
         server = ThreadingHTTPServer(("127.0.0.1", port), _HealthHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        self.addCleanup(server.shutdown)
         self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
 
     def test_install_shortcut_script_creates_non_terminal_desktop_entry(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -108,7 +137,7 @@ class DesktopLaunchTests(unittest.TestCase):
             endpoint_file.write_text(
                 "\n".join(
                     [
-                        "QA_PORTAL_HOST=127.0.0.1",
+                        "QA_PORTAL_HOST=0.0.0.0",
                         f"QA_PORTAL_PORT={port}",
                         f"SCANFORGE_URL=http://127.0.0.1:{port}",
                         "",
@@ -136,6 +165,30 @@ class DesktopLaunchTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             self.assertFalse(mark_file.exists(), "pkexec не должен вызываться при живом сохраненном endpoint")
 
+    def test_launch_finds_running_scanforge_without_saved_endpoint(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            port = _free_port()
+            self._start_health_server(port)
+            bin_dir, mark_file = self._write_fake_pkexec(temp_dir)
+
+            env = os.environ.copy()
+            env["PATH"] = f"{bin_dir}:{env['PATH']}"
+            env["QA_PORTAL_PORT"] = str(port)
+            env["SCANFORGE_RUN_DIR"] = str(Path(temp_dir) / "run")
+            env["SCANFORGE_SKIP_BROWSER"] = "1"
+            env["FAKE_PKEXEC_MARK_FILE"] = str(mark_file)
+
+            result = subprocess.run(
+                ["bash", str(ROOT_DIR / "scripts" / "launch-scanforge-desktop.sh")],
+                capture_output=True,
+                text=True,
+                env=env,
+                cwd=temp_dir,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertFalse(mark_file.exists(), "pkexec не должен вызываться, если ScanForge уже найден в диапазоне")
+
     def test_launch_starts_new_instance_when_saved_endpoint_is_stale(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             stale_port = _free_port()
@@ -146,7 +199,7 @@ class DesktopLaunchTests(unittest.TestCase):
             endpoint_file.write_text(
                 "\n".join(
                     [
-                        "QA_PORTAL_HOST=127.0.0.1",
+                        "QA_PORTAL_HOST=0.0.0.0",
                         f"QA_PORTAL_PORT={stale_port}",
                         f"SCANFORGE_URL=http://127.0.0.1:{stale_port}",
                         "",
@@ -163,7 +216,8 @@ class DesktopLaunchTests(unittest.TestCase):
             env["SCANFORGE_SKIP_BROWSER"] = "1"
             env["FAKE_PKEXEC_MARK_FILE"] = str(mark_file)
             env["FAKE_PKEXEC_WRITE_STATE"] = "1"
-            env["FAKE_ENDPOINT_HOST"] = "127.0.0.1"
+            env["FAKE_ENDPOINT_HOST"] = "0.0.0.0"
+            env["FAKE_ENDPOINT_URL_HOST"] = "127.0.0.1"
             env["FAKE_ENDPOINT_PORT"] = str(live_port)
 
             result = subprocess.run(
@@ -178,4 +232,5 @@ class DesktopLaunchTests(unittest.TestCase):
             self.assertTrue(mark_file.exists(), "pkexec должен вызываться для перезапуска при устаревшем endpoint")
             content = endpoint_file.read_text(encoding="utf-8")
             self.assertIn(f"QA_PORTAL_PORT={live_port}", content)
+            self.assertIn(f"QA_PORTAL_HOST=0.0.0.0", content)
             self.assertIn(f"SCANFORGE_URL=http://127.0.0.1:{live_port}", content)

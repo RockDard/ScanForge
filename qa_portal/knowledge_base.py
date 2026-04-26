@@ -332,6 +332,39 @@ def _severity_from_nvd(metrics: dict[str, Any]) -> str:
     return ""
 
 
+def _collect_nvd_cpes(node: Any) -> list[str]:
+    values: set[str] = set()
+    if isinstance(node, dict):
+        criteria = _normalize_text(node.get("criteria"))
+        if criteria.startswith("cpe:2.3:"):
+            values.add(criteria)
+        match_criteria = _normalize_text(node.get("matchCriteriaId"))
+        if match_criteria.startswith("cpe:2.3:"):
+            values.add(match_criteria)
+        for value in node.values():
+            values.update(_collect_nvd_cpes(value))
+    elif isinstance(node, list):
+        for item in node:
+            values.update(_collect_nvd_cpes(item))
+    return sorted(values)
+
+
+def _nvd_product_index(cpes: list[str]) -> tuple[list[str], list[str]]:
+    vendors: set[str] = set()
+    products: set[str] = set()
+    for cpe in cpes:
+        parts = cpe.split(":")
+        if len(parts) < 6:
+            continue
+        vendor = _normalize_text(parts[3]).casefold()
+        product = _normalize_text(parts[4]).casefold()
+        if vendor and vendor not in {"*", "-"}:
+            vendors.add(vendor)
+        if product and product not in {"*", "-"}:
+            products.add(product)
+    return sorted(vendors), sorted(products)
+
+
 def _excel_serial_to_iso(value: str) -> str:
     try:
         serial = float(value)
@@ -485,6 +518,8 @@ def parse_nvd_feed(path: Path) -> dict[str, Any]:
         cve_id = _normalize_text(cve.get("id"))
         if not cve_id:
             continue
+        cpes = _collect_nvd_cpes(cve.get("configurations", {}))
+        vendors, products = _nvd_product_index(cpes)
         weaknesses: set[str] = set()
         for weakness in cve.get("weaknesses", []):
             for description in weakness.get("description", []):
@@ -498,6 +533,9 @@ def parse_nvd_feed(path: Path) -> dict[str, Any]:
             "cwes": sorted(weaknesses),
             "published": _normalize_text(cve.get("published")),
             "last_modified": _normalize_text(cve.get("lastModified")),
+            "cpes": cpes[:24],
+            "vendors": vendors[:12],
+            "products": products[:12],
         }
     return {
         "count": len(entries),
@@ -645,6 +683,9 @@ def _merge_lookup(indexes: dict[str, dict[str, Any]]) -> dict[str, Any]:
             "summary": item.get("summary", ""),
             "severity": item.get("severity", ""),
             "cwes": sorted(set(item.get("cwes", []))),
+            "cpes": list(item.get("cpes", [])),
+            "vendors": list(item.get("vendors", [])),
+            "products": list(item.get("products", [])),
             "bdu_ids": [],
             "kev": False,
             "kev_name": "",
@@ -661,6 +702,9 @@ def _merge_lookup(indexes: dict[str, dict[str, Any]]) -> dict[str, Any]:
                 "summary": item.get("summary", ""),
                 "severity": "",
                 "cwes": [],
+                "cpes": [],
+                "vendors": [],
+                "products": [],
                 "bdu_ids": [],
                 "kev": False,
                 "kev_name": "",
@@ -685,6 +729,9 @@ def _merge_lookup(indexes: dict[str, dict[str, Any]]) -> dict[str, Any]:
                     "summary": item.get("summary", ""),
                     "severity": item.get("severity", ""),
                     "cwes": [],
+                    "cpes": [],
+                    "vendors": [],
+                    "products": [],
                     "bdu_ids": [],
                     "kev": False,
                     "kev_name": "",

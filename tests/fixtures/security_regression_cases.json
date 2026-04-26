@@ -1,0 +1,72 @@
+[
+  {
+    "name": "python_web_taint_and_deserialization",
+    "files": {
+      "app.py": "import os\nimport pickle\nimport subprocess\nimport yaml\n\n\ndef route(request, cursor):\n    command = request.args.get('cmd')\n    code = request.args.get('code')\n    subprocess.run(command, shell=True)\n    eval(code)\n    cursor.execute(f\"SELECT * FROM users WHERE name='{code}'\")\n    yaml.load(request.data)\n    pickle.loads(request.data)\n"
+    },
+    "expected_titles": [
+      "Python eval execution",
+      "Python shell=True",
+      "Unsafe pickle deserialization",
+      "Unsafe YAML deserialization",
+      "SQL query built with string interpolation",
+      "User-controlled data reaches shell execution",
+      "User-controlled data reaches dynamic code execution",
+      "User-controlled data reaches SQL query construction"
+    ],
+    "expected_references": ["CWE-78", "CWE-89", "CWE-95", "CWE-502"]
+  },
+  {
+    "name": "javascript_dynamic_code_shell_sql_and_cors",
+    "files": {
+      "server.js": "const child_process = require('child_process');\nconst vm = require('vm');\n\nfunction route(req, res, db) {\n  const code = req.query.code;\n  eval(code);\n  new Function(code);\n  vm.runInThisContext(code);\n  child_process.exec(code);\n  db.query(`SELECT * FROM users WHERE name = ${code}`);\n  res.setHeader('Access-Control-Allow-Origin', '*');\n}\n"
+    },
+    "expected_titles": [
+      "JavaScript eval execution",
+      "Dynamic Function constructor",
+      "Node VM dynamic code execution",
+      "Node child_process exec",
+      "SQL query built with string interpolation",
+      "Permissive CORS policy",
+      "User-controlled data reaches shell execution",
+      "User-controlled data reaches dynamic code execution",
+      "User-controlled data reaches SQL query construction"
+    ],
+    "expected_references": ["CWE-78", "CWE-89", "CWE-94", "CWE-95", "CWE-942"]
+  },
+  {
+    "name": "native_container_and_secret_patterns",
+    "files": {
+      "src/main.cpp": "#include <cstdio>\n#include <cstdlib>\n#include <cstring>\n\nint main(int argc, char** argv) {\n    char buffer[8];\n    char other[8];\n    gets(buffer);\n    strcpy(other, argv[1]);\n    sprintf(buffer, \"%s\", argv[1]);\n    mktemp(buffer);\n    char* command = argv[1];\n    system(command);\n    popen(command, \"r\");\n    int weak = rand();\n    const char* api_token = \"secret-token\";\n    return weak;\n}\n",
+      "Dockerfile": "FROM ubuntu:24.04\nCOPY . /app\nCMD [\"/app/server\"]\n"
+    },
+    "expected_titles": [
+      "Unsafe input API",
+      "Potential buffer overflow",
+      "Unbounded formatted write",
+      "Insecure temporary file use",
+      "Shell execution",
+      "Shell pipeline execution",
+      "Weak randomness",
+      "Possible hard-coded secret",
+      "Container image uses default root user",
+      "User-controlled data reaches shell execution"
+    ],
+    "expected_references": ["CWE-78", "CWE-120", "CWE-242", "CWE-250", "CWE-338", "CWE-377", "CWE-798"]
+  },
+  {
+    "name": "go_and_shell_runtime_patterns",
+    "files": {
+      "server.go": "package main\n\nimport (\n    \"database/sql\"\n    \"net/http\"\n    \"os/exec\"\n)\n\nfunc handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {\n    cmd := r.FormValue(\"cmd\")\n    exec.Command(\"sh\", \"-c\", cmd)\n    name := r.URL.Query().Get(\"name\")\n    db.Query(\"select * from users where name=\" + name)\n}\n\nfunc main() {\n    http.ListenAndServe(\":8080\", nil)\n}\n",
+      "install.sh": "curl https://example.test/install.sh | sh\n"
+    },
+    "expected_titles": [
+      "Go shell command execution",
+      "Go HTTP server without explicit middleware",
+      "Shell downloads piped to interpreter",
+      "User-controlled data reaches shell execution",
+      "User-controlled data reaches SQL query construction"
+    ],
+    "expected_references": ["CWE-78", "CWE-89", "CWE-400", "CWE-494"]
+  }
+]

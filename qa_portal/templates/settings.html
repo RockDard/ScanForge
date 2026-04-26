@@ -8,6 +8,191 @@
   <section class="panel">
     <div class="section-heading">
       <div>
+        <p class="eyebrow">{{ tr("Bootstrap") }}</p>
+        <h2>{{ tr("Environment diagnostics") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("Check whether the current Python runtime, project virtual environment, and pinned requirements are ready before launching scans.") }}
+      </p>
+    </div>
+    <div class="summary-grid" data-environment-summary>
+      <div class="summary-card">
+        <span>{{ tr("Status") }}</span>
+        <strong>
+          {% if environment.current_runtime_ready %}
+            {{ tr("ready") }}
+          {% else %}
+            {{ tr("needs bootstrap") }}
+          {% endif %}
+        </strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Python") }}</span>
+        <strong>{{ environment.python_version }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Virtual environment") }}</span>
+        <strong>{{ tr("active" if environment.project_venv.active else ("ready" if environment.project_venv.exists else "missing")) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("pip") }}</span>
+        <strong>{{ tr("ready" if environment.pip_available else "missing") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Requirements") }}</span>
+        <strong>{{ environment.requirements_satisfied }}/{{ environment.requirements_total }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Package manager") }}</span>
+        <strong>{{ environment.package_manager or tr("unknown") }}</strong>
+      </div>
+    </div>
+    <div class="reference-list compact" data-environment-details>
+      <article class="reference-item">
+        <strong>{{ tr("Current runtime") }}</strong>
+        <p><code>{{ environment.python_executable }}</code></p>
+        <small>{{ tr("Project root") }}: <code>{{ environment.project_root }}</code></small>
+      </article>
+      <article class="reference-item">
+        <strong>{{ tr("Bootstrap command") }}</strong>
+        <p><code>{{ environment.bootstrap_command }}</code></p>
+        <small>{{ tr("Preflight command") }}: <code>{{ environment.preflight_command }}</code></small>
+      </article>
+      <article class="reference-item">
+        <strong>{{ tr("Virtual environment") }}</strong>
+        <p><code>{{ environment.project_venv.path }}</code></p>
+        <small>{{ tr("Python") }}: <code>{{ environment.project_venv.python_path }}</code></small>
+      </article>
+      {% if environment.issues %}
+      <article class="reference-item">
+        <strong>{{ tr("Detected issues") }}</strong>
+        <p>{{ tr("Run the bootstrap command first if any Python dependency is missing or the project venv has not been created yet.") }}</p>
+        <small>{{ environment.issues | join(" | ") }}</small>
+      </article>
+      {% else %}
+      <article class="reference-item">
+        <strong>{{ tr("Detected issues") }}</strong>
+        <p>{{ tr("No blocking Python environment issues were detected.") }}</p>
+        <small>{{ tr("Bootstrap is still recommended when you want ScanForge to use the project-local .venv.") }}</small>
+      </article>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel panel-span-2">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Security") }}</p>
+        <h2>{{ tr("Access and runtime control") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("Review authentication, upload limits, stale job recovery, and the latest service logs from the same operator surface.") }}
+      </p>
+    </div>
+    <div class="summary-grid" data-security-summary>
+      <div class="summary-card">
+        <span>{{ tr("Authentication") }}</span>
+        <strong>{{ tr("enabled" if auth_status.enabled else "disabled") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Auth setup") }}</span>
+        <strong>{{ tr(auth_status.source or "disabled") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Current role") }}</span>
+        <strong>{{ tr(auth.role) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Upload files") }}</span>
+        <strong>{{ upload_limits.max_files }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Upload size") }}</span>
+        <strong>{{ upload_limits.max_bytes }} B</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Stale job recovery") }}</span>
+        <strong>{{ tr("enabled") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Runtime log dir") }}</span>
+        <strong>{{ runtime_logs.log_dir }}</strong>
+      </div>
+    </div>
+    <div class="reference-list compact" data-auth-details>
+      <article class="reference-item">
+        <strong>{{ tr("Authentication setup") }}</strong>
+        <p><code>{{ auth_status.bootstrap_path }}</code></p>
+        <small>{{ tr("bootstrap-file" if auth_status.bootstrap_configured else auth_status.source) }}</small>
+      </article>
+    </div>
+    <div class="summary-grid" data-network-summary>
+      <div class="summary-card">
+        <span>{{ tr("Bind address") }}</span>
+        <strong>{{ network.bind_host }}:{{ network.bind_port }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("LAN URLs") }}</span>
+        <strong>{{ network.lan_urls | length }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Allowed hosts") }}</span>
+        <strong>{{ tr("configured" if network.allowed_hosts_configured else "open") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("CORS") }}</span>
+        <strong>{{ tr("enabled" if network.cors_enabled else "disabled") }}</strong>
+      </div>
+    </div>
+    <div class="reference-list compact" data-network-addresses>
+      <article class="reference-item">
+        <strong>{{ tr("LAN access URLs") }}</strong>
+        {% if network.lan_urls %}
+        <p>
+          {% for url in network.lan_urls %}
+          <code>{{ url }}</code>{% if not loop.last %}<br>{% endif %}
+          {% endfor %}
+        </p>
+        {% else %}
+        <small>{{ tr("No LAN URLs detected for the current bind address.") }}</small>
+        {% endif %}
+      </article>
+      <article class="reference-item">
+        <strong>{{ tr("Allowed hosts") }}</strong>
+        <p><code>{{ network.allowed_hosts | join(", ") if network.allowed_hosts else "*" }}</code></p>
+        <small>QA_PORTAL_ALLOWED_HOSTS</small>
+      </article>
+      <article class="reference-item">
+        <strong>{{ tr("CORS origins") }}</strong>
+        <p><code>{{ network.cors_origins | join(", ") if network.cors_origins else tr("none") }}</code></p>
+        <small>QA_PORTAL_CORS_ORIGINS</small>
+      </article>
+      {% if network.warnings %}
+      <article class="reference-item">
+        <strong>{{ tr("Network warnings") }}</strong>
+        <p>{{ network.warnings | join(" | ") }}</p>
+      </article>
+      {% endif %}
+    </div>
+    <div class="reference-list compact" data-runtime-logs>
+      {% for log in runtime_logs.logs %}
+      <article class="reference-item">
+        <strong>{{ tr(log.label) }}</strong>
+        <p><code>{{ log.path }}</code></p>
+        {% if log.lines %}
+        <pre class="log-box compact-log">{% for line in log.lines %}{{ line }}
+{% endfor %}</pre>
+        {% else %}
+        <small>{{ tr("No log lines available yet.") }}</small>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
         <p class="eyebrow">{{ tr("Toolchain") }}</p>
         <h2>{{ tr("Host toolchain") }}</h2>
       </div>
@@ -15,6 +200,41 @@
         {{ tr("Install only the host packages that ScanForge really uses for builds, tests, fuzzing, and report generation.") }}
       </p>
     </div>
+    <div class="summary-grid" data-tool-preflight>
+      <div class="summary-card">
+        <span>{{ tr("Package manager") }}</span>
+        <strong>{{ tool_install_preflight.package_manager or tr("unknown") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Privilege runner") }}</span>
+        <strong>{{ tr(tool_install_preflight.privilege.mode or "none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Preflight issues") }}</span>
+        <strong>{{ tool_install_preflight.issues | length }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Warnings") }}</span>
+        <strong>{{ tool_install_preflight.warnings | length }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Install jobs") }}</span>
+        <strong>{{ tool_install_jobs | length }}</strong>
+      </div>
+    </div>
+    {% if tool_install_preflight.issues or tool_install_preflight.warnings %}
+    <div class="reference-list compact" data-tool-preflight-details>
+      <article class="reference-item">
+        <strong>{{ tr("Tool install preflight") }}</strong>
+        {% if tool_install_preflight.issues %}
+        <p>{{ tool_install_preflight.issues | join(" | ") }}</p>
+        {% endif %}
+        {% if tool_install_preflight.warnings %}
+        <small>{{ tool_install_preflight.warnings | join(" | ") }}</small>
+        {% endif %}
+      </article>
+    </div>
+    {% endif %}
     <div class="tool-list" data-tool-list>
       {% for tool in tool_inventory %}
       <div class="tool-row {% if not tool.installed %}tool-row-missing{% endif %}">
@@ -28,9 +248,28 @@
           {% else %}
           <div class="tool-install-slot">
             <span class="status status-skipped">{{ tr("not installed") }}</span>
+            {% if tool.install_job and tool.install_job.status in ["queued", "running", "failed"] %}
+            <div class="download-progress">
+              <div class="progress-track compact">
+                <div class="progress-bar {% if tool.install_job.status == 'running' %}progress-bar-active{% endif %}" style="width: {{ tool.install_job.progress or 0 }}%"></div>
+              </div>
+              <small class="download-progress-meta">{{ tr(tool.install_job.message or tool.install_job.status) }}</small>
+            </div>
+            {% endif %}
             {% if tool.installable %}
-            <form class="tool-install-form" action="/tools/install/{{ tool.key }}" method="post" data-settings-action data-api-endpoint="/api/tools/install/{{ tool.key }}">
+            <form
+              class="tool-install-form"
+              action="/tools/install/{{ tool.key }}"
+              method="post"
+              data-settings-action
+              data-api-endpoint="/api/tools/install/{{ tool.key }}"
+              data-dry-run-endpoint="/api/tools/install/{{ tool.key }}/dry-run"
+            >
               <input type="hidden" name="next_url" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+              <input type="hidden" name="confirmed" value="1">
+              {% for package in tool.packages %}
+              <input type="hidden" name="packages" value="{{ package }}">
+              {% endfor %}
               <button type="submit" class="button-secondary">{{ tr("Install") }}</button>
             </form>
             {% endif %}
@@ -52,7 +291,7 @@
     <div class="summary-grid" data-ai-summary>
       <div class="summary-card">
         <span>{{ tr("Mode") }}</span>
-        <strong>{{ ai_backend.mode }}</strong>
+        <strong>{{ tr(ai_backend.mode) }}</strong>
       </div>
       <div class="summary-card">
         <span>{{ tr("Worker mode") }}</span>
@@ -60,7 +299,7 @@
       </div>
       <div class="summary-card">
         <span>{{ tr("Provider") }}</span>
-        <strong>{{ ai_backend.provider }}</strong>
+        <strong>{{ tr(ai_backend.provider) }}</strong>
       </div>
       <div class="summary-card">
         <span>{{ tr("Model") }}</span>
@@ -68,7 +307,7 @@
       </div>
       <div class="summary-card">
         <span>{{ tr("Status") }}</span>
-        <strong>{{ tr("ready" if ai_backend.configured else "fallback") }}</strong>
+        <strong>{{ tr("ready" if ai_backend.mode == "remote-ai" or ai_backend.mode == "local-llm" else "fallback") }}</strong>
       </div>
       <div class="summary-card">
         <span>{{ tr("Local runner") }}</span>
@@ -80,14 +319,93 @@
       </div>
     </div>
     <p class="section-copy" data-ai-copy>
-      {% if ai_backend.configured %}
-      {{ tr("Remote AI review is configured and will augment the scan reports.") }}
-      {% elif ai_backend.mode == "local-llm" %}
+      {% if ai_backend.mode == "local-llm" %}
       {{ tr("A downloaded local model is ready and will be used for AI-assisted review.") }}
+      {% elif ai_backend.mode == "remote-ai" %}
+      {{ tr("Remote AI review is configured and will augment the scan reports.") }}
       {% else %}
       {{ tr("Remote AI review is not configured, so the portal will generate a deterministic local review instead.") }}
       {% endif %}
     </p>
+    {% set active_routing = (ai_backend.routing_options | selectattr('id', 'equalto', ai_backend.settings.routing_mode) | list | first) %}
+    {% set active_local_model_option = (ai_backend.local_model_options | selectattr('id', 'equalto', ai_backend.settings.preferred_local_model) | list | first) %}
+    <div class="reference-list compact" data-ai-diagnostics>
+      <article class="reference-item">
+        <strong>{{ tr("Routing mode") }}</strong>
+        <p>{{ tr(active_routing.label if active_routing else ai_backend.settings.routing_mode) }}</p>
+        <small>{{ ai_backend.routing_reason }}</small>
+      </article>
+      <article class="reference-item">
+        <strong>{{ tr("Remote endpoint") }}</strong>
+        <p><code>{{ ai_backend.settings.url or tr("not configured") }}</code></p>
+        <small>{{ tr("Configuration source") }}: {{ tr(ai_backend.settings.source) }}</small>
+      </article>
+      <article class="reference-item">
+        <strong>{{ tr("Preferred local model") }}</strong>
+        <p>{{ tr(active_local_model_option.label if active_local_model_option else (ai_backend.settings.preferred_local_model or "Automatic selection")) }}</p>
+        <small>{{ tr("API key") }}: {{ tr("configured" if ai_backend.settings.api_key_configured else "not configured") }}</small>
+      </article>
+    </div>
+    <form
+      class="integration-form"
+      action="/assistant/config"
+      method="post"
+      data-ai-config-form
+    >
+      <input type="hidden" name="next_url" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+      <div class="integration-fields">
+        <label>
+          <span>{{ tr("Use remote backend") }}</span>
+          <input type="checkbox" name="enabled" data-field="enabled" {% if ai_backend.settings.enabled %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Provider") }}</span>
+          <select name="provider" data-field="provider">
+            {% for provider in ai_backend.provider_options %}
+            <option value="{{ provider.id }}" {% if ai_backend.settings.provider == provider.id %}selected{% endif %}>{{ tr(provider.label) }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>{{ tr("Remote endpoint") }}</span>
+          <input type="url" name="url" data-field="url" value="{{ ai_backend.settings.url }}" placeholder="https://host/v1/chat/completions">
+        </label>
+        <label>
+          <span>{{ tr("Model") }}</span>
+          <input type="text" name="model" data-field="model" value="{{ ai_backend.settings.model }}" placeholder="gpt-4.1-mini">
+        </label>
+        <label>
+          <span>{{ tr("API key") }}</span>
+          <input type="password" name="api_key" data-field="api_key" value="" placeholder="{% if ai_backend.settings.api_key_configured %}{{ tr('Leave blank to keep the stored key.') }}{% else %}sk-...{% endif %}">
+        </label>
+        <label>
+          <span>{{ tr("Timeout, seconds") }}</span>
+          <input type="number" min="5" max="300" name="timeout_seconds" data-field="timeout_seconds" value="{{ ai_backend.settings.timeout_seconds }}">
+        </label>
+        <label>
+          <span>{{ tr("Routing mode") }}</span>
+          <select name="routing_mode" data-field="routing_mode">
+            {% for item in ai_backend.routing_options %}
+            <option value="{{ item.id }}" {% if ai_backend.settings.routing_mode == item.id %}selected{% endif %}>{{ tr(item.label) }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>{{ tr("Preferred local model") }}</span>
+          <select name="preferred_local_model" data-field="preferred_local_model">
+            {% for item in ai_backend.local_model_options %}
+            <option value="{{ item.id }}" {% if ai_backend.settings.preferred_local_model == item.id or (not ai_backend.settings.preferred_local_model and item.id == 'auto') %}selected{% endif %}>{{ tr(item.label) }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="reference-actions">
+        <button type="submit" class="button-primary">{{ tr("Save AI settings") }}</button>
+        <button type="button" class="button-secondary" data-ai-probe-trigger>{{ tr("Probe backend") }}</button>
+      </div>
+      <small class="download-progress-meta">{{ tr("Leave the API key field empty to keep the currently stored key.") }}</small>
+      <div class="empty-state" data-ai-probe-result hidden></div>
+    </form>
     <div class="reference-list compact" data-ai-model-list>
       <article class="reference-item">
         <strong>{{ ai_backend.default_model.label }}</strong>
@@ -128,6 +446,265 @@
         </div>
       </article>
       {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("AI-assisted actions") }}</p>
+        <h2>{{ tr("Operational playbooks") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("The assistant layer can summarize risk, propose fixes, suggest tests, and focus fuzzing when a compatible backend is available.") }}
+      </p>
+    </div>
+    <div class="reference-list compact" data-ai-playbooks>
+      {% for playbook in ai_backend.playbooks %}
+      <article class="reference-item">
+        <strong>{{ tr(playbook.title) }}</strong>
+        <p>{{ tr("Used when") }}: {{ tr(playbook.used_when) }}</p>
+        <small>{{ tr("Output") }}: {{ tr(playbook.output) }}</small>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Release control") }}</p>
+        <h2>{{ tr("Release gate policy") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("Protect releases with baseline-aware policy checks before a build is accepted for delivery.") }}
+      </p>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span>{{ tr("Policy source") }}</span>
+        <strong>{{ tr(release_gate_policy.policy.source or "default") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Enabled blockers") }}</span>
+        <strong>{{ release_gate_policy.enabled_blockers }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Enabled reviews") }}</span>
+        <strong>{{ release_gate_policy.enabled_reviews }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Baseline-aware") }}</span>
+        <strong>{{ tr("yes" if release_gate_policy.baseline_aware else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Risk score threshold") }}</span>
+        <strong>{{ release_gate_policy.policy.review_on_risk_score_above }}</strong>
+      </div>
+    </div>
+    <form class="integration-form" action="/release-gate/config" method="post" data-release-gate-config-form>
+      <input type="hidden" name="next_url" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+      <div class="integration-fields">
+        <label>
+          <span>{{ tr("Block on critical findings") }}</span>
+          <input type="checkbox" name="block_on_critical_findings" {% if release_gate_policy.policy.block_on_critical_findings %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Block on new high findings") }}</span>
+          <input type="checkbox" name="block_on_new_high_findings" {% if release_gate_policy.policy.block_on_new_high_findings %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Block on new critical findings") }}</span>
+          <input type="checkbox" name="block_on_new_critical_findings" {% if release_gate_policy.policy.block_on_new_critical_findings %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Block on new vulnerable dependencies") }}</span>
+          <input type="checkbox" name="block_on_new_vulnerable_dependencies" {% if release_gate_policy.policy.block_on_new_vulnerable_dependencies %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Block on new reachable vulnerable dependencies") }}</span>
+          <input type="checkbox" name="block_on_new_reachable_vulnerable_dependencies" {% if release_gate_policy.policy.block_on_new_reachable_vulnerable_dependencies %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Block on dependency baseline regression") }}</span>
+          <input type="checkbox" name="block_on_dependency_baseline_regression" {% if release_gate_policy.policy.block_on_dependency_baseline_regression %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Review on persisting high findings") }}</span>
+          <input type="checkbox" name="review_on_persisting_high_findings" {% if release_gate_policy.policy.review_on_persisting_high_findings %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Review on risk score regression") }}</span>
+          <input type="checkbox" name="review_on_risk_score_regression" {% if release_gate_policy.policy.review_on_risk_score_regression %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Review when net-new findings exceed fixed findings") }}</span>
+          <input type="checkbox" name="review_on_net_new_findings" {% if release_gate_policy.policy.review_on_net_new_findings %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Review on high-severity regression") }}</span>
+          <input type="checkbox" name="review_on_high_severity_regression" {% if release_gate_policy.policy.review_on_high_severity_regression %}checked{% endif %}>
+        </label>
+        <label>
+          <span>{{ tr("Risk score threshold") }}</span>
+          <input type="number" min="0" max="100" name="review_on_risk_score_above" value="{{ release_gate_policy.policy.review_on_risk_score_above }}">
+        </label>
+      </div>
+      <div class="reference-actions">
+        <button type="submit" class="button-primary">{{ tr("Save release gate policy") }}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Software supply chain") }}</p>
+        <h2>{{ tr("Dependency suppression policy") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("Manage accepted dependency exceptions in one place so the local SCA layer can suppress reviewed package and CVE combinations without editing files by hand.") }}
+      </p>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span>{{ tr("Policy source") }}</span>
+        <strong>{{ tr(dependency_suppressions.source or "default") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Suppression rules") }}</span>
+        <strong>{{ dependency_suppressions.rule_count or 0 }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Path") }}</span>
+        <strong><code>{{ dependency_suppressions.path }}</code></strong>
+      </div>
+    </div>
+    <form class="integration-form" action="/dependency-suppressions/config" method="post" data-dependency-suppressions-form>
+      <input type="hidden" name="next_url" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+      <div class="integration-fields">
+        <label class="panel-span-2">
+          <span>{{ tr("Suppression rules, JSON") }}</span>
+          <textarea name="rules_json" rows="12" spellcheck="false">{{ {"rules": dependency_suppressions.rules} | tojson(indent=2) }}</textarea>
+        </label>
+      </div>
+      <div class="reference-actions">
+        <button type="submit" class="button-primary">{{ tr("Save suppression policy") }}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel panel-span-2">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Delivery hooks") }}</p>
+        <h2>{{ tr("Integrations") }}</h2>
+      </div>
+      <p class="section-copy">
+        {{ tr("Configure providers, webhook endpoints, and CI handoff examples for automated scans.") }}
+      </p>
+    </div>
+    <div class="summary-grid" data-integration-summary>
+      <div class="summary-card">
+        <span>{{ tr("Enabled integrations") }}</span>
+        <strong>{{ integrations.enabled_count }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Webhook events") }}</span>
+        <strong>{{ integrations.recent_events | length }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Updated") }}</span>
+        <strong>{{ integrations.updated_at or tr("pending") }}</strong>
+      </div>
+    </div>
+    <div class="reference-list" data-integration-provider-list>
+      {% for provider in integrations.providers %}
+      <article class="reference-item integration-card">
+        <div class="job-card-top">
+          <strong>{{ label("integration_provider", provider.key) }}</strong>
+          <span class="tag {% if provider.enabled %}{% else %}tag-soft{% endif %}">
+            {{ tr("on" if provider.enabled else "off") }}
+          </span>
+        </div>
+        <form class="integration-form" data-integration-config-form data-provider-key="{{ provider.key }}">
+          <label class="integration-checkbox">
+            <input type="checkbox" data-field="enabled" {% if provider.enabled %}checked{% endif %}>
+            <span>{{ tr("Enabled") }}</span>
+          </label>
+          <label>
+            <span>{{ tr("Provider URL") }}</span>
+            <input type="text" data-field="base_url" value="{{ provider.base_url }}">
+          </label>
+          <label>
+            <span>{{ tr("Token") }}</span>
+            <input type="password" data-field="token" value="">
+          </label>
+          <label>
+            <span>{{ tr("Webhook secret") }}</span>
+            <input type="password" data-field="webhook_secret" value="">
+          </label>
+          <label>
+            <span>{{ tr("Webhook URL") }}</span>
+            <input type="text" value="{{ provider.webhook_url }}" readonly>
+          </label>
+          <label>
+            <span>{{ tr("Default mode") }}</span>
+            <select data-field="default_mode">
+              {% for mode_value, mode_label in modes %}
+              <option value="{{ mode_value }}" {% if provider.default_mode == mode_value %}selected{% endif %}>{{ mode_label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>{{ tr("Default preset") }}</span>
+            <select data-field="default_preset">
+              {% for preset in presets %}
+              <option value="{{ preset.key }}" {% if provider.default_preset == preset.key %}selected{% endif %}>{{ preset.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div class="reference-actions">
+            <button type="submit" class="button-secondary">{{ tr("Save integration settings") }}</button>
+          </div>
+        </form>
+      </article>
+      {% endfor %}
+    </div>
+    <div class="two-column">
+      <section class="stack-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">{{ tr("Examples") }}</p>
+            <h2>{{ tr("Upload from CI") }}</h2>
+          </div>
+        </div>
+        <p class="section-copy">{{ tr("Attach optional repository and pipeline metadata to make handoff and reports richer.") }}</p>
+        <pre class="code-box" data-integration-examples>{% for key, value in integrations.examples.items() %}# {{ key }}
+{{ value }}
+
+{% endfor %}</pre>
+      </section>
+      <section class="stack-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">{{ tr("Recent events") }}</p>
+            <h2>{{ tr("Webhook events") }}</h2>
+          </div>
+        </div>
+        <div class="reference-list compact" data-integration-events>
+          {% for event in integrations.recent_events %}
+          <article class="reference-item">
+            <strong>{{ label("integration_provider", event.provider) }}</strong>
+            <p>{{ event.id }}</p>
+            <small>{{ event.received_at }}</small>
+          </article>
+          {% endfor %}
+          {% if not integrations.recent_events %}
+          <p class="empty-state">{{ tr("No webhook events were captured yet.") }}</p>
+          {% endif %}
+        </div>
+      </section>
     </div>
   </section>
 

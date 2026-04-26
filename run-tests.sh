@@ -18,4 +18,7 @@ bash -n "$SCRIPT_DIR/run-sync-kb.sh"
 if compgen -G "$SCRIPT_DIR/scripts/*.sh" >/dev/null; then
   bash -n "$SCRIPT_DIR"/scripts/*.sh
 fi
+if [[ "${SCANFORGE_RUN_WEB_SMOKE:-0}" == "1" ]]; then
+  "$SCRIPT_DIR/scripts/run-web-smoke.sh"
+fi
 "$SCRIPT_DIR/tests/test_123.sh"

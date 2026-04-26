@@ -5,6 +5,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV QA_PORTAL_HOST=0.0.0.0
 ENV QA_PORTAL_PORT=8000
+ENV QA_PORTAL_ALLOWED_HOSTS=
+ENV QA_PORTAL_CORS_ORIGINS=
+ENV QA_PORTAL_CORS_ALLOW_CREDENTIALS=0
 ENV QA_PORTAL_RELOAD=0
 ENV QA_PORTAL_DATA_DIR=/app/data
 ENV PATH=/opt/venv/bin:$PATH
@@ -36,7 +39,7 @@ RUN python3 -m venv /opt/venv && pip install --no-cache-dir -r /app/requirements
 
 COPY . /app
 
-RUN chmod +x /app/run-server.sh /app/run-worker.sh /app/run-sync-kb.sh /app/run-tests.sh
+RUN chmod +x /app/run-server.sh /app/run-worker.sh /app/run-sync-kb.sh /app/run-tests.sh /app/scripts/*.sh
 
 RUN useradd --create-home --shell /bin/bash portal && \
     mkdir -p /app/data && \

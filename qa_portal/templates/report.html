@@ -34,6 +34,26 @@
     <div class="card"><strong>{{ tr("Files") }}</strong><br>{{ report.project.file_count }}</div>
   </div>
 
+  <h2>{{ tr("Report reproducibility") }}</h2>
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Generated at") }}</strong><br>{{ report.reproducibility.generated_at or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Engine") }}</strong><br>{{ report.reproducibility.engine_name }} {{ report.reproducibility.engine_version }}</div>
+    <div class="card"><strong>{{ tr("Runtime signature") }}</strong><br><code>{{ report.reproducibility.runtime_signature or tr("none") }}</code></div>
+    <div class="card"><strong>{{ tr("Report schema") }}</strong><br>{{ report.reproducibility.report_schema or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Python runtime") }}</strong><br>{{ report.reproducibility.python_runtime or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Host platform") }}</strong><br>{{ report.reproducibility.host_platform or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Formats") }}</strong><br>{{ report.reproducibility.formats | join(", ") or tr("none") }}</div>
+  </div>
+
+  <h2>{{ tr("Report sections") }}</h2>
+  <div>
+    {% for section in report.section_manifest %}
+    <span class="tag {% if not section.included %}tag-muted{% endif %}">
+      {{ section.title }}: {{ tr("included" if section.included else "omitted") }}
+    </span>
+    {% endfor %}
+  </div>
+
   <h2>{{ tr("Executive summary") }}</h2>
   <div class="summary">
     <div class="card"><strong>{{ tr("Risk score") }}</strong><br>{{ report.summary.risk_score }}/100</div>
@@ -42,7 +62,7 @@
     <div class="card"><strong>{{ tr("Total findings") }}</strong><br>{{ report.summary.total_findings }}</div>
   </div>
 
-  <h2>{{ tr("Selected checks") }}</h2>
+  <h2 id="selected-checks">{{ tr("Selected checks") }}</h2>
   <div>
     {% for check in report.summary.selected_checks %}
     <span class="tag">{{ label("check", check) }}</span>
@@ -90,6 +110,19 @@
     <div class="card"><strong>{{ tr("Decision") }}</strong><br>{{ report.ai_review.release_decision }}</div>
     <div class="card"><strong>{{ tr("Confidence") }}</strong><br>{{ report.ai_review.confidence }}</div>
     <div class="card"><strong>{{ tr("Model") }}</strong><br>{{ report.ai_review.model }}</div>
+    <div class="card">
+      <strong>{{ tr("Active playbooks") }}</strong><br>
+      {% for item in report.ai_review.get("active_playbooks", []) %}
+      {{ tr(item) }}{% if not loop.last %}, {% endif %}
+      {% endfor %}
+      {% if not report.ai_review.get("active_playbooks") %}{{ tr("none") }}{% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    <div class="card">
+      <strong>{{ tr("Routing reason") }}</strong>
+      <p>{{ report.ai_review.get("routing_reason") or tr("No routing note was generated.") }}</p>
+    </div>
   </div>
   <div class="actions">
     <div class="card">
@@ -107,12 +140,101 @@
       {% for item in report.ai_review.blockers %}
       <p>{{ item }}</p>
       {% endfor %}
+      {% if not report.ai_review.blockers %}
+      <p>{{ tr("No blockers generated.") }}</p>
+      {% endif %}
     </div>
     <div class="card">
       <strong>{{ tr("Quick Wins") }}</strong>
       {% for item in report.ai_review.quick_wins %}
       <p>{{ item }}</p>
       {% endfor %}
+      {% if not report.ai_review.quick_wins %}
+      <p>{{ tr("No quick wins generated.") }}</p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    <div class="card">
+      <strong>{{ tr("Root Causes") }}</strong>
+      {% for item in report.ai_review.root_causes %}
+      <p>{{ item }}</p>
+      {% endfor %}
+      {% if not report.ai_review.root_causes %}
+      <p>{{ tr("No root causes generated.") }}</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <strong>{{ tr("Fix Strategy") }}</strong>
+      {% for item in report.ai_review.fix_strategy %}
+      <p>{{ item }}</p>
+      {% endfor %}
+      {% if not report.ai_review.fix_strategy %}
+      <p>{{ tr("No fix strategy generated.") }}</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <strong>{{ tr("Suggested Tests") }}</strong>
+      {% for item in report.ai_review.suggested_tests %}
+      <p>{{ item }}</p>
+      {% endfor %}
+      {% if not report.ai_review.suggested_tests %}
+      <p>{{ tr("No suggested tests generated.") }}</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <strong>{{ tr("Fuzz Targets") }}</strong>
+      {% for item in report.ai_review.fuzz_targets %}
+      <p>{{ item }}</p>
+      {% endfor %}
+      {% if not report.ai_review.fuzz_targets %}
+      <p>{{ tr("No fuzz targets generated.") }}</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <strong>{{ tr("Dependency Notes") }}</strong>
+      {% for item in report.ai_review.dependency_notes %}
+      <p>{{ item }}</p>
+      {% endfor %}
+      {% if not report.ai_review.dependency_notes %}
+      <p>{{ tr("No dependency notes generated.") }}</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <strong>{{ tr("Crash Clusters") }}</strong>
+      {% for item in report.ai_review.get("crash_clusters", []) %}
+      <p>{{ item }}</p>
+      {% endfor %}
+      {% if not report.ai_review.get("crash_clusters") %}
+      <p>{{ tr("No crash clusters generated.") }}</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <strong>{{ tr("Runtime Explanations") }}</strong>
+      {% for item in report.ai_review.get("runtime_explanations", []) %}
+      <p>{{ item }}</p>
+      {% endfor %}
+      {% if not report.ai_review.get("runtime_explanations") %}
+      <p>{{ tr("No runtime explanations generated.") }}</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <strong>{{ tr("Patch Candidates") }}</strong>
+      {% for item in report.ai_review.get("patch_candidates", []) %}
+      <p>{{ item }}</p>
+      {% endfor %}
+      {% if not report.ai_review.get("patch_candidates") %}
+      <p>{{ tr("No patch candidates generated.") }}</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <strong>{{ tr("Regression Tests") }}</strong>
+      {% for item in report.ai_review.get("regression_tests", []) %}
+      <p>{{ item }}</p>
+      {% endfor %}
+      {% if not report.ai_review.get("regression_tests") %}
+      <p>{{ tr("No regression tests generated.") }}</p>
+      {% endif %}
     </div>
   </div>
   <p>{{ report.ai_review.reason }}</p>
@@ -140,6 +262,16 @@
   </div>
   {% endif %}
 
+  <h2>{{ tr("CI/CD context") }}</h2>
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Integration provider") }}</strong><br>{{ label("integration_provider", report.ci_context.integration_provider or "manual") }}</div>
+    <div class="card"><strong>{{ tr("Repository") }}</strong><br>{{ report.ci_context.repository_url or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Branch") }}</strong><br>{{ report.ci_context.branch or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Commit") }}</strong><br>{{ report.ci_context.commit_sha or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Pipeline") }}</strong><br>{{ report.ci_context.pipeline_url or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Merge request") }}</strong><br>{{ report.ci_context.merge_request or tr("none") }}</div>
+  </div>
+
   {% if report.comparison %}
   <h2>{{ tr("Retest baseline") }}</h2>
   <div class="summary">
@@ -165,6 +297,322 @@
     {% endfor %}
   </div>
   {% endif %}
+  {% endif %}
+
+  <h2 id="finding-lifecycle">{{ tr("Finding lifecycle") }}</h2>
+  {% if report.finding_lifecycle %}
+  <div class="summary">
+    <div class="card"><strong>{{ tr("New findings") }}</strong><br>{{ report.finding_lifecycle.new_count }}</div>
+    <div class="card"><strong>{{ tr("Persisting findings") }}</strong><br>{{ report.finding_lifecycle.persisting_count }}</div>
+    <div class="card"><strong>{{ tr("Fixed findings") }}</strong><br>{{ report.finding_lifecycle.fixed_count }}</div>
+    <div class="card"><strong>{{ tr("Tracked decisions") }}</strong><br>{{ report.finding_lifecycle.tracked_decisions or 0 }}</div>
+    <div class="card"><strong>{{ tr("Muted active") }}</strong><br>{{ report.finding_lifecycle.muted_active_count or 0 }}</div>
+  </div>
+  <div class="references">
+    {% for item in report.finding_lifecycle.new_findings[:5] %}
+    <div class="reference-card">
+      <strong>{{ tr("New findings") }}</strong>
+      <div>{{ item.title }}</div>
+      <small>{{ item.path or "project" }}</small>
+    </div>
+    {% endfor %}
+    {% for item in report.finding_lifecycle.persisting_findings[:5] %}
+    <div class="reference-card">
+      <strong>{{ tr("Persisting findings") }}</strong>
+      <div>{{ item.title }}</div>
+      <small>{{ item.path or "project" }}</small>
+    </div>
+    {% endfor %}
+    {% for item in report.finding_lifecycle.fixed_findings[:5] %}
+    <div class="reference-card">
+      <strong>{{ tr("Fixed findings") }}</strong>
+      <div>{{ item.title }}</div>
+      <small>{{ item.path or "project" }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p>{{ tr("No lifecycle baseline was available yet.") }}</p>
+  {% endif %}
+
+  <h2 id="software-supply-chain">{{ tr("Software supply chain") }}</h2>
+  {% if report.dependencies and report.dependencies.manifests %}
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Component count") }}</strong><br>{{ report.dependencies.component_count }}</div>
+    <div class="card"><strong>{{ tr("Dependency manifests") }}</strong><br>{{ report.dependencies.manifest_count }}</div>
+    <div class="card"><strong>{{ tr("Lockfiles") }}</strong><br>{{ report.dependencies.lockfile_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Resolved components") }}</strong><br>{{ report.dependencies.resolved_component_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Transitive components") }}</strong><br>{{ report.dependencies.transitive_component_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Ecosystems") }}</strong><br>{{ report.dependencies.ecosystem_counts | length }}</div>
+    <div class="card"><strong>{{ tr("Dependency flags") }}</strong><br>{{ report.dependencies.flag_counts | length }}</div>
+    <div class="card"><strong>{{ tr("License gaps") }}</strong><br>{{ report.dependencies.license_gap_count }}</div>
+    <div class="card"><strong>{{ tr("Vulnerable components") }}</strong><br>{{ report.dependencies.vulnerable_component_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Reachable vulnerable components") }}</strong><br>{{ report.dependencies.reachable_vulnerable_component_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Suppressed vulnerabilities") }}</strong><br>{{ report.dependencies.suppressed_vulnerability_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Suppression rules") }}</strong><br>{{ report.dependencies.suppression_rule_count or 0 }}</div>
+  </div>
+  <div>
+    {% for ecosystem, count in report.dependencies.ecosystem_counts.items() %}
+    <span class="tag tag-muted">{{ ecosystem }}: {{ count }}</span>
+    {% endfor %}
+    {% for flag, count in report.dependencies.flag_counts.items() %}
+    <span class="tag">{{ flag }}: {{ count }}</span>
+    {% endfor %}
+  </div>
+  <div class="references">
+    {% for manifest in report.dependencies.manifests[:10] %}
+    <div class="reference-card">
+      <strong>{{ manifest.path }}</strong>
+      <div>{{ manifest.kind }} · {{ manifest.component_count }} · {{ manifest.role or "manifest" }}</div>
+      <small>{{ manifest.license or tr("none") }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% if report.dependencies.top_vulnerable_components %}
+  <div class="references">
+    {% for component in report.dependencies.top_vulnerable_components[:8] %}
+    <div class="reference-card">
+      <strong>{{ component.name }}</strong>
+      <div>{{ component.version or tr("none") }} · {{ component.ecosystem or tr("none") }}</div>
+      <small>
+        {{ tr("Reachable") }}: {{ tr("yes" if component.reachable else "no") }}
+        · {{ tr("Active vulnerabilities") }}: {{ component.active_vulnerability_count or 0 }}
+        · KEV: {{ component.kev_count or 0 }}
+      </small>
+      {% if component.cve_ids %}
+      <p>{{ component.cve_ids | join(", ") }}</p>
+      {% endif %}
+      {% if component.bdu_ids %}
+      <small>{{ tr("FSTEC IDs") }}: {{ component.bdu_ids | join(", ") }}</small>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% else %}
+  <p>{{ tr("No dependency manifests were detected for this run.") }}</p>
+  {% endif %}
+
+  {% if report.dependency_diff and report.dependency_diff.baseline_available %}
+  <h2 id="dependency-diff">{{ tr("Dependency diff") }}</h2>
+  <div class="summary">
+    <div class="card"><strong>{{ tr("New vulnerable dependencies") }}</strong><br>{{ report.dependency_diff.new_vulnerable_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("New reachable vulnerable dependencies") }}</strong><br>{{ report.dependency_diff.new_reachable_vulnerable_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Fixed vulnerable dependencies") }}</strong><br>{{ report.dependency_diff.fixed_vulnerable_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Dependency baseline regressions") }}</strong><br>{{ report.dependency_diff.dependency_regression_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Added components") }}</strong><br>{{ report.dependency_diff.added_count or (report.dependency_diff.added_components | length) }}</div>
+    <div class="card"><strong>{{ tr("Removed components") }}</strong><br>{{ report.dependency_diff.removed_count or (report.dependency_diff.removed_components | length) }}</div>
+    <div class="card"><strong>{{ tr("Version changed components") }}</strong><br>{{ report.dependency_diff.version_changed_count or (report.dependency_diff.version_changed_components | length) }}</div>
+    <div class="card"><strong>{{ tr("Current vulnerable components") }}</strong><br>{{ report.dependency_diff.current_vulnerable_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Baseline vulnerable components") }}</strong><br>{{ report.dependency_diff.baseline_vulnerable_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Vulnerable dependency delta") }}</strong><br>{{ report.dependency_diff.vulnerability_count_delta or 0 }}</div>
+    <div class="card"><strong>{{ tr("Current reachable vulnerable components") }}</strong><br>{{ report.dependency_diff.current_reachable_vulnerable_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Baseline reachable vulnerable components") }}</strong><br>{{ report.dependency_diff.baseline_reachable_vulnerable_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Reachable vulnerable delta") }}</strong><br>{{ report.dependency_diff.reachable_vulnerability_count_delta or 0 }}</div>
+  </div>
+  {% if report.dependency_diff.worsened_components or report.dependency_diff.new_vulnerable_components %}
+  <div class="references">
+    {% for component in report.dependency_diff.worsened_components[:6] %}
+    <div class="reference-card">
+      <strong>{{ component.name }}</strong>
+      <div>{{ component.baseline_version or tr("none") }} → {{ component.current_version or tr("none") }}</div>
+      <small>
+        {{ tr("Vulnerable dependency delta") }}:
+        {{ component.baseline_vulnerability_count or 0 }} → {{ component.current_vulnerability_count or 0 }}
+      </small>
+      {% if component.new_vulnerability_ids %}
+      <p>{{ component.new_vulnerability_ids | join(", ") }}</p>
+      {% endif %}
+      <small>
+        {% if component.became_reachable %}{{ tr("New reachable vulnerable dependencies") }}{% endif %}
+        {% if component.became_reachable and component.kev_regression %} · {% endif %}
+        {% if component.kev_regression %}KEV{% endif %}
+      </small>
+    </div>
+    {% endfor %}
+    {% for component in report.dependency_diff.new_vulnerable_components[:4] %}
+    <div class="reference-card">
+      <strong>{{ component.name }}</strong>
+      <div>{{ component.effective_version or component.version or tr("none") }}</div>
+      <small>{{ tr("New vulnerable dependencies") }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {% if report.service_runtime %}
+  <h2 id="dast-iast">{{ tr("DAST and IAST") }}</h2>
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Frameworks") }}</strong><br>{{ report.service_runtime.frameworks | join(", ") or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Detected routes") }}</strong><br>{{ report.service_runtime.route_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Route inventory") }}</strong><br>{{ report.service_runtime.route_inventory_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Route source files") }}</strong><br>{{ report.service_runtime.route_source_file_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Runtime target URL") }}</strong><br>{{ report.service_runtime.target_url or tr("none") }}</div>
+    <div class="card"><strong>{{ tr("Verified routes") }}</strong><br>{{ report.service_runtime.verified_route_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Source-correlated routes") }}</strong><br>{{ report.service_runtime.source_correlated_paths or 0 }}</div>
+    <div class="card"><strong>{{ tr("Live verification requests") }}</strong><br>{{ report.service_runtime.verification_request_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("OpenAPI specs") }}</strong><br>{{ report.service_runtime.openapi_specs | length }}</div>
+    <div class="card"><strong>{{ tr("Verification profile") }}</strong><br>{{ tr(report.service_runtime.verification_profile or "passive") }}</div>
+    <div class="card"><strong>{{ tr("Authentication") }}</strong><br>{{ tr(report.service_runtime.auth_mode or "none") }}</div>
+    <div class="card"><strong>{{ tr("Request timeout, seconds") }}</strong><br>{{ report.service_runtime.request_timeout_seconds or 3 }}</div>
+    <div class="card"><strong>{{ tr("Skipped requests") }}</strong><br>{{ report.service_runtime.skipped_requests | length }}</div>
+    <div class="card"><strong>{{ tr("Runtime server errors") }}</strong><br>{{ report.service_runtime.server_error_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Unauthenticated writes") }}</strong><br>{{ report.service_runtime.unauthenticated_write_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Security-declared bypasses") }}</strong><br>{{ report.service_runtime.security_declared_bypass_count or 0 }}</div>
+    <div class="card"><strong>{{ tr("Verification replay") }}</strong><br>{{ report.service_runtime.replay_script or tr("none") }}</div>
+  </div>
+  {% if report.service_runtime.documentation_exposure_paths %}
+  <div class="references">
+    {% for path in report.service_runtime.documentation_exposure_paths %}
+    <div class="reference-card">
+      <strong>{{ tr("Exposed documentation surface") }}</strong>
+      <div>{{ path }}</div>
+      <small>{{ tr("Authentication") }}: {{ tr("none") }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if report.service_runtime.route_inventory %}
+  <div class="references">
+    {% for item in report.service_runtime.route_inventory[:6] %}
+    <div class="reference-card">
+      <strong>{{ item.method }} {{ item.path or "/" }}</strong>
+      <div>{{ item.source_path or tr("none") }}{% if item.line %}:{{ item.line }}{% endif %}</div>
+      <small>{{ item.framework or tr("none") }} · {{ tr(item.source_kind or "none") }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if report.service_runtime.verification_results %}
+  <div class="references">
+    {% for item in report.service_runtime.verification_results[:10] %}
+    <div class="reference-card">
+      <strong>{{ item.method }} {{ item.path or "/" }}</strong>
+      <div>HTTP {{ item.status }}</div>
+      <small>{{ tr("Authentication") }}: {{ tr(item.auth_used or "none") }} · {{ tr("Verification profile") }}: {{ tr(item.profile or "passive") }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <h2 id="instrumented-runtime">{{ tr("Instrumented runtime") }}</h2>
+  {% if report.dynamic_analysis %}
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Eligible") }}</strong><br>{{ tr("yes" if report.dynamic_analysis.eligible else "no") }}</div>
+    <div class="card"><strong>{{ tr("Sanitizer configured") }}</strong><br>{{ tr("yes" if report.dynamic_analysis.sanitizer_configured else "no") }}</div>
+    <div class="card"><strong>{{ tr("Sanitizer built") }}</strong><br>{{ tr("yes" if report.dynamic_analysis.sanitizer_built else "no") }}</div>
+    <div class="card"><strong>{{ tr("Instrumented tests") }}</strong><br>{{ tr("yes" if report.dynamic_analysis.sanitizer_tests_ran else "no") }}</div>
+    <div class="card"><strong>Valgrind</strong><br>{{ tr("yes" if report.dynamic_analysis.valgrind_available else "no") }}</div>
+  </div>
+  {% if report.dynamic_analysis.report %}
+  <p><strong>{{ tr("Run log") }}:</strong> {{ report.dynamic_analysis.report }}</p>
+  {% endif %}
+  {% else %}
+  <p>{{ tr("Dynamic analysis was not eligible for this job.") }}</p>
+  {% endif %}
+
+  {% if report.vm_runtime %}
+  <h2 id="vm-full-system-runtime">{{ tr("VM and full-system runtime") }}</h2>
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Eligible") }}</strong><br>{{ tr("yes" if report.vm_runtime.eligible else "no") }}</div>
+    <div class="card"><strong>{{ tr("Process trace") }}</strong><br>{{ tr("yes" if report.vm_runtime.process_trace_collected else "no") }}</div>
+    <div class="card"><strong>{{ tr("Binary inventory") }}</strong><br>{{ report.vm_runtime.binary_inventory | length }}</div>
+    <div class="card"><strong>{{ tr("Taint tracking") }}</strong><br>{{ tr("yes" if report.vm_runtime.taint_tracking_available else "no") }}</div>
+    <div class="card"><strong>{{ tr("Crash replay") }}</strong><br>{{ report.vm_runtime.crash_replay_script or tr("none") }}</div>
+  </div>
+  {% endif %}
+
+  {% if report.release_gate %}
+  <h2 id="release-gate">{{ tr("Release gate") }}</h2>
+  {% set release_policy = report.release_gate.get("policy", {}) %}
+  <div class="summary">
+    <div class="card"><strong>{{ tr("Decision") }}</strong><br>{{ report.release_gate.decision }}</div>
+    <div class="card"><strong>{{ tr("Policy hits") }}</strong><br>{{ report.release_gate.hits | length }}</div>
+    <div class="card"><strong>{{ tr("Policy source") }}</strong><br>{{ release_policy.get("source") or tr("default") }}</div>
+    <div class="card"><strong>{{ tr("Risk score threshold") }}</strong><br>{{ release_policy.get("review_on_risk_score_above", tr("none")) }}</div>
+  </div>
+  <div class="references">
+    {% for hit in report.release_gate.hits %}
+    <div class="reference-card">
+      <strong>{{ hit.rule_id }}</strong>
+      <div>[{{ hit.level }}] {{ hit.message }}</div>
+      <small>{{ hit.value }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if report.compliance_profiles %}
+  <h2 id="compliance-profiles">{{ tr("Compliance profiles") }}</h2>
+  <div class="summary">
+    {% for profile in report.compliance_profiles.profiles %}
+    <div class="card">
+      <strong>{{ profile.label }}</strong><br>
+      {{ profile.matched_rules }} / {{ profile.total_rules or profile.matched_rules }}<br>
+      <small>{{ tr("Mapped findings") }}: {{ profile.matched_findings }} · {{ tr("Coverage") }}: {{ profile.coverage_percent or 0 }}% · {{ tr(profile.status or "gap") }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="references">
+    {% for profile in report.compliance_profiles.profiles %}
+    {% set profile_detail = report.compliance_profiles.get("details", {}).get(profile.profile, {}) %}
+    <div class="reference-card">
+      <strong>{{ profile.label }}</strong>
+      <div>{{ tr("Rules covered") }}: {{ profile.matched_rules }} / {{ profile.total_rules or profile.matched_rules }}</div>
+      <small>
+        {% if profile.report_sections %}
+        {{ tr("Related report sections") }}:
+        {% for section in profile.report_sections %}
+        {{ tr(section.title) }}{% if not loop.last %}, {% endif %}
+        {% endfor %}
+        {% else %}
+        {{ tr("No evidence mapped to this control.") }}
+        {% endif %}
+      </small>
+      {% for rule in profile_detail.get("rules", []) %}
+      <div class="reference-card">
+        <strong>{{ rule.control_id }}</strong>
+        <div>{{ rule.title }}</div>
+        <small>{{ tr(rule.status or "gap") }} · {{ tr("Mapped findings") }}: {{ rule.match_count or 0 }}</small>
+        <p>{{ rule.rationale }}</p>
+        {% if rule.report_sections %}
+        <p>
+          <strong>{{ tr("Related report sections") }}:</strong>
+          {% for section in rule.report_sections %}
+          <a href="#{{ section.anchor }}">{{ tr(section.title) }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </p>
+        {% endif %}
+        {% if rule.matches %}
+        <ul>
+          {% for match in rule.matches[:4] %}
+          <li>
+            <strong>{{ label("severity", match.severity) }}</strong> · {{ match.title }}
+            {% if match.path %} · <code>{{ match.path }}{% if match.line %}:{{ match.line }}{% endif %}</code>{% endif %}
+            <br>
+            <small>
+              {{ tr("Primary report section") }}:
+              <a href="#{{ match.report_section.anchor }}">{{ tr(match.report_section.title) }}</a>
+              {% if match.related_sections %}
+              · {{ tr("Related report sections") }}:
+              {% for section in match.related_sections %}
+              <a href="#{{ section.anchor }}">{{ tr(section.title) }}</a>{% if not loop.last %}, {% endif %}
+              {% endfor %}
+              {% endif %}
+            </small>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p>{{ tr("No evidence mapped to this control.") }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
   {% endif %}
 
   <h2>{{ tr("Adaptive Hardware Plan") }}</h2>
@@ -232,7 +680,7 @@
     {% endfor %}
   </ul>
 
-  <h2>{{ tr("Top findings") }}</h2>
+  <h2 id="top-findings">{{ tr("Top findings") }}</h2>
   {% for finding in report.summary.top_findings %}
   <div class="finding">
     <strong class="severity-{{ finding.severity }}">[{{ finding.severity.upper() }}]</strong>

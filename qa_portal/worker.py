@@ -7,7 +7,7 @@ import socket
 import sys
 import time
 
-from .config import WORKER_POLL_SECONDS, WORKER_PROCESSES
+from .config import STALE_RUNNING_SECONDS, WORKER_POLL_SECONDS, WORKER_PROCESSES
 from .hardware import detect_host_hardware, recommended_worker_processes
 from .pipeline import run_job
 from .storage import JobContext, JobStore
@@ -18,6 +18,7 @@ def worker_id() -> str:
 
 
 def process_one_job(store: JobStore) -> bool:
+    store.recover_stale_running(STALE_RUNNING_SECONDS)
     claimed = store.try_claim(worker_id())
     if claimed is None:
         return False

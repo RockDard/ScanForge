@@ -38,6 +38,9 @@
           <a class="ghost-link" href="/">{{ tr("Dashboard") }}</a>
           <a class="ghost-link" href="/settings">{{ tr("Settings") }}</a>
           <a class="ghost-link" href="/docs">API</a>
+          {% if auth.enabled %}
+          <span class="ghost-link">{{ auth.username }} / {{ tr(auth.role) }}</span>
+          {% endif %}
         </div>
         <div class="hero-visual">
           <img class="hero-graphic" src="/static/hero-grid.svg" alt="">

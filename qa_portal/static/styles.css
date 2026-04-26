@@ -34,7 +34,7 @@
 }
 
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 body {
@@ -43,35 +43,20 @@ body {
   color: var(--ink);
   font-family: "Avenir Next", "Trebuchet MS", Verdana, sans-serif;
   background:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 28%),
     radial-gradient(circle at 84% 12%, rgba(240, 178, 119, 0.22), transparent 24%),
     radial-gradient(circle at 78% 78%, rgba(15, 118, 110, 0.13), transparent 26%),
     linear-gradient(140deg, #efe4d3 0%, #dae7f2 47%, #efe7d7 100%);
+  background-size: 56px 56px, 56px 56px, auto, auto, auto, auto;
   position: relative;
   overflow-x: hidden;
 }
 
 body::before,
 body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-}
-
-body::before {
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(circle at center, black 42%, transparent 88%);
-  opacity: 0.36;
-}
-
-body::after {
-  background:
-    radial-gradient(circle at 20% 24%, rgba(15, 118, 110, 0.12), transparent 0 18%),
-    radial-gradient(circle at 82% 72%, rgba(184, 106, 66, 0.1), transparent 0 16%);
+  display: none;
 }
 
 a {
@@ -148,8 +133,7 @@ img {
   padding: 4px;
   border-radius: 999px;
   border: 1px solid rgba(255, 243, 232, 0.18);
-  background: rgba(255, 250, 244, 0.08);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 250, 244, 0.16);
 }
 
 .lang-link {
@@ -246,8 +230,7 @@ img {
   padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 243, 232, 0.16);
-  background: rgba(255, 250, 244, 0.1);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 250, 244, 0.18);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -306,8 +289,7 @@ button,
 .ghost-link {
   color: #f7f2e8;
   border-color: rgba(255, 243, 232, 0.18);
-  background: rgba(255, 250, 244, 0.08);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 250, 244, 0.16);
 }
 
 button {
@@ -358,11 +340,9 @@ button:disabled,
   border-radius: var(--radius-xl);
   border: 1px solid rgba(255, 255, 255, 0.58);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.46), transparent 32%),
-    var(--panel);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), transparent 32%),
+    rgba(255, 252, 247, 0.97);
   box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(14px);
-  animation: rise-in 560ms cubic-bezier(0.2, 0.72, 0.2, 1) both;
 }
 
 .panel::after {
@@ -380,8 +360,7 @@ button:disabled,
 }
 
 .summary-panel {
-  position: sticky;
-  top: 18px;
+  position: static;
   align-self: start;
 }
 
@@ -517,6 +496,80 @@ button:disabled,
   gap: 10px;
   align-items: start;
   margin-top: 10px;
+}
+
+.stack-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 252, 247, 0.72));
+  box-shadow: var(--shadow-md);
+}
+
+.code-box {
+  margin: 0;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(17, 42, 67, 0.1);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 26%),
+    linear-gradient(180deg, #112236, #15324a);
+  color: #dcebf7;
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
+.integration-card {
+  display: grid;
+  gap: 12px;
+}
+
+.integration-form,
+.finding-review-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.integration-form label,
+.finding-review-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.integration-form input,
+.integration-form select,
+.finding-review-form input,
+.finding-review-form select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font: inherit;
+}
+
+.integration-checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.integration-checkbox input {
+  width: auto;
+  min-height: auto;
+}
+
+.ai-detail-grid {
+  margin-top: 12px;
 }
 
 .download-progress {
@@ -805,12 +858,12 @@ small,
 }
 
 .tool-install-slot {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  min-width: 148px;
-  min-height: 46px;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: min(260px, 100%);
 }
 
 .tool-install-slot .status {
@@ -818,25 +871,27 @@ small,
 }
 
 .tool-install-form {
-  position: absolute;
-  inset: 0;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  opacity: 0;
-  pointer-events: none;
+  flex-wrap: wrap;
+  gap: 8px;
   transition: opacity 160ms ease;
 }
 
-.tool-row-missing:hover .tool-install-form,
-.tool-row-missing:focus-within .tool-install-form {
-  opacity: 1;
-  pointer-events: auto;
+.action-notice {
+  flex-basis: 100%;
+  color: var(--muted);
+  line-height: 1.35;
+  text-align: right;
 }
 
-.tool-row-missing:hover .tool-install-slot .status,
-.tool-row-missing:focus-within .tool-install-slot .status {
-  opacity: 0;
+.action-notice-success {
+  color: #2f8c5b;
+}
+
+.action-notice-error {
+  color: #b44747;
 }
 
 code {
@@ -920,6 +975,14 @@ code {
   color: #d7e8f4;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   white-space: pre-wrap;
+}
+
+.compact-log {
+  margin-top: 12px;
+  max-height: 220px;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 0.86rem;
 }
 
 .filter-actions .ghost-link {

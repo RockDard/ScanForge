@@ -1,7 +1,11 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+if os.name == "nt":
+    raise unittest.SkipTest("worker tests require POSIX file locking through fcntl")
 
 from qa_portal.analysis import is_archive
 from qa_portal.models import JobOptions

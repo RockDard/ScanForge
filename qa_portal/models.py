@@ -29,6 +29,15 @@ class Finding:
     source: str = ""
     recommendation: str = ""
     references: list[dict[str, Any]] = field(default_factory=list)
+    rule_id: str = ""
+    confidence: str = "medium"
+    evidence: str = ""
+    trace: list[dict[str, Any]] = field(default_factory=list)
+    fingerprint: str = ""
+    lifecycle_state: str = "new"
+    review_state: str = "open"
+    review_note: str = ""
+    muted_until: str | None = None
 
 
 @dataclass

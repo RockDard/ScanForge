@@ -6,6 +6,8 @@ __pycache__/
 data/uploads/*
 data/jobs/*
 data/knowledge_base/*
+data/audit/*
+data/validation/*
 
 
 .ai

@@ -4,19 +4,41 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+print_help() {
+  cat <<'EOF'
+Usage: ./scripts/launch-scanforge-desktop.sh
+
+Opens an existing ScanForge endpoint or starts ScanForge through pkexec on a
+free port. The server listens on all interfaces by default; the desktop browser
+opens the local URL.
+EOF
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  print_help
+  exit 0
+fi
+
+if [[ $# -gt 0 ]]; then
+  printf 'Unknown argument: %s\n' "$1" >&2
+  print_help >&2
+  exit 1
+fi
+
 # Общий helper обеспечивает одинаковую логику healthcheck и endpoint state.
 # shellcheck source=/dev/null
 source "$ROOT_DIR/scripts/scanforge-lib.sh"
 scanforge_init_python "$ROOT_DIR"
 scanforge_load_project_env "$ROOT_DIR"
 
-HOST="${QA_PORTAL_HOST:-127.0.0.1}"
+HOST="${QA_PORTAL_HOST:-0.0.0.0}"
 PORT="${QA_PORTAL_PORT:-8000}"
 RUN_DIR="${SCANFORGE_RUN_DIR:-/var/run/scanforge}"
 ENDPOINT_FILE="$RUN_DIR/endpoint.env"
-URL="http://${HOST}:${PORT}"
+URL="http://127.0.0.1:${PORT}"
 LAUNCH_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/scanforge"
 LAUNCH_LOG_FILE="$LAUNCH_LOG_DIR/desktop-launch.log"
+HAD_ENDPOINT_STATE=0
 
 mkdir -p "$LAUNCH_LOG_DIR"
 
@@ -51,22 +73,44 @@ open_browser() {
 
 # Сначала пытаемся открыть уже живой сохраненный endpoint, если он существует.
 if scanforge_load_endpoint_state "$ENDPOINT_FILE"; then
+  HAD_ENDPOINT_STATE=1
   log_launch "Найден сохраненный endpoint $SCANFORGE_URL."
-  if scanforge_healthcheck "$QA_PORTAL_HOST" "$QA_PORTAL_PORT"; then
-    log_launch "Сохраненный endpoint отвечает, новый старт не требуется."
-    open_browser "$SCANFORGE_URL"
-    exit 0
+  if [[ "$QA_PORTAL_HOST" != "$HOST" ]]; then
+    log_launch "Сохраненный endpoint слушает $QA_PORTAL_HOST, а требуется $HOST; нужен перезапуск."
+  elif scanforge_healthcheck "$QA_PORTAL_HOST" "$QA_PORTAL_PORT"; then
+    if scanforge_compatibilitycheck "$QA_PORTAL_HOST" "$QA_PORTAL_PORT"; then
+      log_launch "Сохраненный endpoint отвечает и совместим с текущим кодом, новый старт не требуется."
+      open_browser "$SCANFORGE_URL"
+      exit 0
+    fi
+    log_launch "Сохраненный endpoint отвечает, но несовместим с текущим кодом. Потребуется новый старт."
   fi
   log_launch "Сохраненный endpoint не ответил, переходим к новому старту."
 fi
 
 
-# Если в .env задан рабочий адрес и он уже отвечает, используем его без нового старта.
-if scanforge_healthcheck "$HOST" "$PORT"; then
-  URL="http://${HOST}:${PORT}"
-  log_launch "Адрес из окружения уже отвечает: $URL."
-  open_browser "$URL"
-  exit 0
+# Если сохраненного endpoint не было, можно переиспользовать адрес из окружения
+# или найти уже запущенный ScanForge в диапазоне портов.
+if [[ "$HAD_ENDPOINT_STATE" != "1" ]]; then
+  if scanforge_healthcheck "$HOST" "$PORT"; then
+    if scanforge_compatibilitycheck "$HOST" "$PORT"; then
+      URL="http://127.0.0.1:${PORT}"
+      log_launch "Адрес из окружения уже отвечает и совместим: $URL."
+      open_browser "$URL"
+      exit 0
+    fi
+    log_launch "Адрес из окружения отвечает, но экземпляр несовместим с текущим кодом. Выполняем новый старт."
+  fi
+
+  if scanforge_pick_port "$HOST" "$PORT" 8000 8100; then
+    if [[ "$SCANFORGE_PICK_STATUS" == "scanforge-running" || "$SCANFORGE_PICK_STATUS" == "fallback-running-scanforge" ]]; then
+      log_launch "Найден уже запущенный ScanForge без state-файла: $SCANFORGE_URL."
+      open_browser "$SCANFORGE_URL"
+      exit 0
+    fi
+  fi
+else
+  log_launch "Сохраненный endpoint устарел; пропускаем поиск сторонних endpoints и запускаем новый экземпляр."
 fi
 
 if ! command -v pkexec >/dev/null 2>&1; then
@@ -90,14 +134,14 @@ fi
 
 for _ in $(seq 1 60); do
   if scanforge_load_endpoint_state "$ENDPOINT_FILE"; then
-    if scanforge_healthcheck "$QA_PORTAL_HOST" "$QA_PORTAL_PORT"; then
+    if scanforge_healthcheck "$QA_PORTAL_HOST" "$QA_PORTAL_PORT" && scanforge_compatibilitycheck "$QA_PORTAL_HOST" "$QA_PORTAL_PORT"; then
       log_launch "Новый endpoint из state-файла отвечает: $SCANFORGE_URL."
       open_browser "$SCANFORGE_URL"
       exit 0
     fi
   fi
   if [[ "$URL" =~ ^http://([^:/]+):([0-9]+)$ ]]; then
-    if scanforge_healthcheck "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"; then
+    if scanforge_healthcheck "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" && scanforge_compatibilitycheck "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"; then
       log_launch "Новый endpoint из stdout отвечает: $URL."
       open_browser "$URL"
       exit 0

@@ -4,6 +4,7 @@ import json
 import shutil
 import threading
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 from typing import Callable, Iterator
@@ -15,6 +16,27 @@ from .models import Artifact, JobOptions, JobRecord, StepProgress, utc_now
 
 
 Mutator = Callable[[JobRecord], None]
+
+
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _finish_steps(job: JobRecord, *, status: str, message: str) -> None:
+    for step in job.steps:
+        if step.status in {"pending", "running", "paused"}:
+            step.status = status  # type: ignore[assignment]
+            step.progress = 100
+            step.message = message
+            step.finished_at = utc_now()
 
 
 class JobStore:
@@ -130,7 +152,7 @@ class JobStore:
                 self._save_unlocked(job)
                 return job
 
-    def request_cancel(self, job_id: str) -> JobRecord:
+    def request_cancel(self, job_id: str, *, force: bool = False) -> JobRecord:
         def mutator(job: JobRecord) -> None:
             job.metadata["cancel_requested"] = True
             job.metadata["cancel_requested_at"] = utc_now()
@@ -139,14 +161,55 @@ class JobStore:
                 job.current_step = "Cancelled before execution"
                 job.progress = 100
                 job.finished_at = utc_now()
-                for step in job.steps:
-                    if step.status in {"pending", "running"}:
-                        step.status = "cancelled"
-                        step.progress = 100
-                        step.message = "Cancelled before execution."
-                        step.finished_at = utc_now()
+                _finish_steps(job, status="cancelled", message="Cancelled before execution.")
+            elif force and job.status == "running":
+                job.status = "cancelled"
+                job.current_step = "Force-cancelled by operator"
+                job.progress = 100
+                job.finished_at = utc_now()
+                job.metadata["force_cancelled"] = True
+                job.metadata["force_cancelled_at"] = utc_now()
+                _finish_steps(job, status="cancelled", message="Force-cancelled by operator.")
 
         return self.mutate(job_id, mutator)
+
+    def recover_stale_running(self, stale_after_seconds: int, *, now: datetime | None = None) -> list[JobRecord]:
+        if stale_after_seconds <= 0:
+            return []
+        current_time = now or datetime.now(timezone.utc)
+        recovered: list[JobRecord] = []
+        for candidate in self.list():
+            if candidate.status != "running":
+                continue
+            updated_at = _parse_timestamp(candidate.updated_at) or _parse_timestamp(candidate.metadata.get("claimed_at"))
+            if updated_at is None:
+                continue
+            if (current_time - updated_at).total_seconds() < stale_after_seconds:
+                continue
+
+            def mutator(job: JobRecord) -> None:
+                if job.status != "running":
+                    return
+                cancelled = bool(job.metadata.get("cancel_requested"))
+                job.status = "cancelled" if cancelled else "failed"
+                job.current_step = "Recovered stale running job"
+                job.progress = 100
+                job.finished_at = utc_now()
+                job.metadata["stale_recovered"] = True
+                job.metadata["stale_recovered_at"] = utc_now()
+                job.metadata["stale_after_seconds"] = stale_after_seconds
+                job.logs.append(
+                    f"[{utc_now()}] Job was marked {job.status} because the worker stopped updating it."
+                )
+                _finish_steps(
+                    job,
+                    status="cancelled" if cancelled else "failed",
+                    message="Worker heartbeat became stale.",
+                )
+
+            recovered.append(self.mutate(candidate.id, mutator))
+        self.normalize_queue()
+        return recovered
 
     def request_pause(self, job_id: str) -> JobRecord:
         def mutator(job: JobRecord) -> None:
@@ -334,7 +397,11 @@ def default_steps(mode: str, options: JobOptions | None = None) -> list[StepProg
         ("security", "Security scan", selected.is_enabled("security", mode)),
         ("style", "Style scan", selected.is_enabled("style", mode)),
         ("quality", "Quality scan", selected.is_enabled("quality", mode)),
+        ("dependency", "Dependency and SCA scan", True),
+        ("service_runtime", "DAST and IAST scan", True),
+        ("dynamic", "Instrumented runtime scan", True),
         ("fuzzing", "Fuzzing", selected.is_enabled("fuzzing", mode)),
+        ("vm_runtime", "VM and full-system runtime", True),
     ]
     steps: list[StepProgress] = []
     for key, title, enabled in step_specs:

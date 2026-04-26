@@ -72,6 +72,11 @@
         <button type="submit">{{ tr("Cancel") }}</button>
       </form>
       {% endif %}
+      {% if job.status == "running" %}
+      <form action="/jobs/{{ job.id }}/cancel?force=true" method="post">
+        <button type="submit">{{ tr("Force cancel") }}</button>
+      </form>
+      {% endif %}
       {% if job.status == "queued" or job.status == "paused" %}
       <form action="/jobs/{{ job.id }}/queue/up" method="post">
         <button type="submit">{{ tr("Move up") }}</button>
@@ -113,7 +118,7 @@
       </div>
       <div class="summary-card">
         <span>{{ tr("Multilingual risk") }}</span>
-        <strong>{{ label("severity", multilinguality.get("risk_level")) if multilinguality.get("risk_level") in {"critical", "high", "medium", "low", "info"} else tr("none") }}</strong>
+        <strong>{{ label("severity", multilinguality.get("risk_level")) if multilinguality.get("risk_level") in ["critical", "high", "medium", "low", "info"] else tr("none") }}</strong>
       </div>
     </div>
     <div class="tag-row">
@@ -196,6 +201,62 @@
   <section class="panel">
     <div class="section-heading">
       <div>
+        <p class="eyebrow">{{ tr("Upload from CI") }}</p>
+        <h2>{{ tr("CI/CD context") }}</h2>
+      </div>
+    </div>
+    {% set ci_context = job.metadata.get("ci_context", {}) %}
+    {% set runtime_request = runtime_request_public or job.metadata.get("service_runtime_request_public", {}) %}
+    <div class="summary-grid" id="ci-context-summary">
+      <div class="summary-card">
+        <span>{{ tr("Integration provider") }}</span>
+        <strong>{{ label("integration_provider", ci_context.get("integration_provider") or "manual") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Repository") }}</span>
+        <strong>{{ ci_context.get("repository_url") or tr("none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Branch") }}</span>
+        <strong>{{ ci_context.get("branch") or tr("none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Commit") }}</span>
+        <strong>{{ ci_context.get("commit_sha") or tr("none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Pipeline") }}</span>
+        <strong>{{ ci_context.get("pipeline_url") or tr("none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Merge request") }}</span>
+        <strong>{{ ci_context.get("merge_request") or tr("none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Runtime target URL") }}</span>
+        <strong>{{ runtime_request.get("target_url") or tr("none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Verification profile") }}</span>
+        <strong>{{ tr(runtime_request.get("service_runtime_profile") or runtime_request.get("verification_profile") or "passive") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Authentication") }}</span>
+        <strong>{{ tr(runtime_request.get("auth_mode_requested") or "none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Request timeout, seconds") }}</span>
+        <strong>{{ runtime_request.get("request_timeout_seconds") or 3 }}</strong>
+      </div>
+    </div>
+    {% if not ci_context and not runtime_request %}
+    <p class="empty-state">{{ tr("No CI/CD metadata was attached to this run.") }}</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
         <p class="eyebrow">{{ tr("Executive summary") }}</p>
         <h2>{{ tr("Decision snapshot") }}</h2>
       </div>
@@ -239,7 +300,7 @@
         <h2>{{ tr("AI review") }}</h2>
       </div>
       <p class="section-copy">
-        {{ tr("Backend mode: {mode}. Provider: {provider}.", mode=ai_backend.mode, provider=ai_backend.provider) }}
+        {{ tr("Backend mode: {mode}. Provider: {provider}.", mode=tr(ai_backend.mode), provider=tr(ai_backend.provider)) }}
       </p>
     </div>
     <div id="ai-review">
@@ -258,7 +319,20 @@
           <span>{{ tr("Confidence") }}</span>
           <strong>{{ review.get("confidence", tr("pending")) }}</strong>
         </div>
+        <div class="summary-card">
+          <span>{{ tr("Active playbooks") }}</span>
+          <strong>
+            {% for item in review.get("active_playbooks", []) %}
+            {{ tr(item) }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+            {% if not review.get("active_playbooks") %}{{ tr("none") }}{% endif %}
+          </strong>
+        </div>
       </div>
+      <article class="action-card">
+        <strong>{{ tr("Routing reason") }}</strong>
+        <p>{{ review.get("routing_reason", tr("No routing note was generated.")) }}</p>
+      </article>
       <article class="action-card">
         <strong>{{ tr("Overview") }}</strong>
         <p>{{ review.get("overview", tr("No AI review yet.")) }}</p>
@@ -273,12 +347,103 @@
           {% for item in review.get("blockers", []) %}
           <p>{{ item }}</p>
           {% endfor %}
+          {% if not review.get("blockers") %}
+          <p>{{ tr("No blockers generated.") }}</p>
+          {% endif %}
         </article>
         <article class="action-card">
           <strong>{{ tr("Quick Wins") }}</strong>
           {% for item in review.get("quick_wins", []) %}
           <p>{{ item }}</p>
           {% endfor %}
+          {% if not review.get("quick_wins") %}
+          <p>{{ tr("No quick wins generated.") }}</p>
+          {% endif %}
+        </article>
+      </div>
+      <div class="two-column ai-detail-grid">
+        <article class="action-card">
+          <strong>{{ tr("Root Causes") }}</strong>
+          {% for item in review.get("root_causes", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+          {% if not review.get("root_causes") %}
+          <p>{{ tr("No root causes generated.") }}</p>
+          {% endif %}
+        </article>
+        <article class="action-card">
+          <strong>{{ tr("Fix Strategy") }}</strong>
+          {% for item in review.get("fix_strategy", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+          {% if not review.get("fix_strategy") %}
+          <p>{{ tr("No fix strategy generated.") }}</p>
+          {% endif %}
+        </article>
+        <article class="action-card">
+          <strong>{{ tr("Suggested Tests") }}</strong>
+          {% for item in review.get("suggested_tests", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+          {% if not review.get("suggested_tests") %}
+          <p>{{ tr("No suggested tests generated.") }}</p>
+          {% endif %}
+        </article>
+        <article class="action-card">
+          <strong>{{ tr("Fuzz Targets") }}</strong>
+          {% for item in review.get("fuzz_targets", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+          {% if not review.get("fuzz_targets") %}
+          <p>{{ tr("No fuzz targets generated.") }}</p>
+          {% endif %}
+        </article>
+      </div>
+      <article class="action-card">
+        <strong>{{ tr("Dependency Notes") }}</strong>
+        {% for item in review.get("dependency_notes", []) %}
+        <p>{{ item }}</p>
+        {% endfor %}
+        {% if not review.get("dependency_notes") %}
+        <p>{{ tr("No dependency notes generated.") }}</p>
+        {% endif %}
+      </article>
+      <div class="two-column ai-detail-grid">
+        <article class="action-card">
+          <strong>{{ tr("Crash Clusters") }}</strong>
+          {% for item in review.get("crash_clusters", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+          {% if not review.get("crash_clusters") %}
+          <p>{{ tr("No crash clusters generated.") }}</p>
+          {% endif %}
+        </article>
+        <article class="action-card">
+          <strong>{{ tr("Runtime Explanations") }}</strong>
+          {% for item in review.get("runtime_explanations", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+          {% if not review.get("runtime_explanations") %}
+          <p>{{ tr("No runtime explanations generated.") }}</p>
+          {% endif %}
+        </article>
+        <article class="action-card">
+          <strong>{{ tr("Patch Candidates") }}</strong>
+          {% for item in review.get("patch_candidates", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+          {% if not review.get("patch_candidates") %}
+          <p>{{ tr("No patch candidates generated.") }}</p>
+          {% endif %}
+        </article>
+        <article class="action-card">
+          <strong>{{ tr("Regression Tests") }}</strong>
+          {% for item in review.get("regression_tests", []) %}
+          <p>{{ item }}</p>
+          {% endfor %}
+          {% if not review.get("regression_tests") %}
+          <p>{{ tr("No regression tests generated.") }}</p>
+          {% endif %}
         </article>
       </div>
       <p class="empty-state">{{ review.get("reason", "") }}</p>
@@ -327,6 +492,175 @@
       {% endfor %}
       {% if not kb.get("top_references") %}
       <p class="empty-state">{{ tr("Knowledge base matches will appear once reporting begins.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Software supply chain") }}</p>
+        <h2>{{ tr("Dependency inventory") }}</h2>
+      </div>
+    </div>
+    {% set dependencies = job.metadata.get("dependencies", {}) %}
+    <div class="summary-grid" id="dependency-summary">
+      <div class="summary-card">
+        <span>{{ tr("Component count") }}</span>
+        <strong>{{ dependencies.get("component_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Dependency manifests") }}</span>
+        <strong>{{ dependencies.get("manifest_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Lockfiles") }}</span>
+        <strong>{{ dependencies.get("lockfile_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Resolved components") }}</span>
+        <strong>{{ dependencies.get("resolved_component_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Transitive components") }}</span>
+        <strong>{{ dependencies.get("transitive_component_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Ecosystems") }}</span>
+        <strong>{{ dependencies.get("ecosystem_counts", {}) | length }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Dependency flags") }}</span>
+        <strong>{{ dependencies.get("flag_counts", {}) | length }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("License gaps") }}</span>
+        <strong>{{ dependencies.get("license_gap_count", 0) }}</strong>
+      </div>
+    </div>
+    <div class="tag-row" id="dependency-flags">
+      {% for ecosystem, count in dependencies.get("ecosystem_counts", {}).items() %}
+      <span class="tag tag-soft">{{ ecosystem }}: {{ count }}</span>
+      {% endfor %}
+      {% for flag, count in dependencies.get("flag_counts", {}).items() %}
+      <span class="tag">{{ flag }}: {{ count }}</span>
+      {% endfor %}
+    </div>
+    <div class="reference-list compact" id="dependency-manifests">
+      {% for manifest in dependencies.get("manifests", [])[:8] %}
+      <article class="reference-item">
+        <strong>{{ manifest.path }}</strong>
+        <p>{{ manifest.kind }} · {{ manifest.component_count }} · {{ manifest.role or "manifest" }}</p>
+        <small>{{ manifest.license or tr("none") }}</small>
+      </article>
+      {% endfor %}
+      {% if not dependencies.get("manifests") %}
+      <p class="empty-state">{{ tr("No dependency manifests were detected for this run.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Instrumented runtime") }}</p>
+        <h2>{{ tr("Dynamic analysis") }}</h2>
+      </div>
+    </div>
+    {% set dynamic_analysis = job.metadata.get("dynamic_analysis", {}) %}
+    <div class="summary-grid" id="dynamic-summary">
+      <div class="summary-card">
+        <span>{{ tr("Eligible") }}</span>
+        <strong>{{ tr("yes" if dynamic_analysis.get("eligible") else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Sanitizer configured") }}</span>
+        <strong>{{ tr("yes" if dynamic_analysis.get("sanitizer_configured") else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Sanitizer built") }}</span>
+        <strong>{{ tr("yes" if dynamic_analysis.get("sanitizer_built") else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Instrumented tests") }}</span>
+        <strong>{{ tr("yes" if dynamic_analysis.get("sanitizer_tests_ran") else "no") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Build system") }}</span>
+        <strong>{{ job.metadata.get("project", {}).get("build_systems", []) | join(", ") or tr("none") }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Valgrind</span>
+        <strong>{{ tr("yes" if dynamic_analysis.get("valgrind_available") else "no") }}</strong>
+      </div>
+    </div>
+    {% if dynamic_analysis.get("report") %}
+    <div class="reference-list compact" id="dynamic-logs">
+      <article class="reference-item">
+        <strong>{{ tr("Run log") }}</strong>
+        <p>{{ dynamic_analysis.get("report") }}</p>
+        <small>{{ tr("Dynamic analysis") }}</small>
+      </article>
+    </div>
+    {% else %}
+    <p class="empty-state">{{ tr("Dynamic analysis was not eligible for this job.") }}</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ tr("Lifecycle") }}</p>
+        <h2>{{ tr("Finding lifecycle") }}</h2>
+      </div>
+    </div>
+    {% set lifecycle = job.metadata.get("finding_lifecycle", {}) %}
+    <div class="summary-grid" id="lifecycle-summary">
+      <div class="summary-card">
+        <span>{{ tr("New findings") }}</span>
+        <strong>{{ lifecycle.get("new_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Persisting findings") }}</span>
+        <strong>{{ lifecycle.get("persisting_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Fixed findings") }}</span>
+        <strong>{{ lifecycle.get("fixed_count", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Tracked decisions") }}</span>
+        <strong>{{ lifecycle.get("tracked_decisions", 0) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>{{ tr("Muted active") }}</span>
+        <strong>{{ lifecycle.get("muted_active_count", 0) }}</strong>
+      </div>
+    </div>
+    <div class="reference-list compact" id="lifecycle-details">
+      {% for item in lifecycle.get("new_findings", [])[:4] %}
+      <article class="reference-item">
+        <strong>{{ tr("New findings") }}</strong>
+        <p>{{ item.title }}</p>
+        <small>{{ item.path or "project" }}</small>
+      </article>
+      {% endfor %}
+      {% for item in lifecycle.get("persisting_findings", [])[:4] %}
+      <article class="reference-item">
+        <strong>{{ tr("Persisting findings") }}</strong>
+        <p>{{ item.title }}</p>
+        <small>{{ item.path or "project" }}</small>
+      </article>
+      {% endfor %}
+      {% for item in lifecycle.get("fixed_findings", [])[:4] %}
+      <article class="reference-item">
+        <strong>{{ tr("Fixed findings") }}</strong>
+        <p>{{ item.title }}</p>
+        <small>{{ item.path or "project" }}</small>
+      </article>
+      {% endfor %}
+      {% if not lifecycle.get("new_findings") and not lifecycle.get("persisting_findings") and not lifecycle.get("fixed_findings") %}
+      <p class="empty-state">{{ tr("No lifecycle baseline was available yet.") }}</p>
       {% endif %}
     </div>
   </section>
@@ -442,6 +776,10 @@
           <span class="status status-{{ 'failed' if finding.severity in ['critical', 'high'] else 'running' if finding.severity == 'medium' else 'skipped' }}">{{ label("severity", finding.severity) }}</span>
         </div>
         <p class="finding-meta">{{ label("category", finding.category) }}{% if finding.path %} | {{ finding.path }}{% endif %}{% if finding.line %}:{{ finding.line }}{% endif %}</p>
+        <div class="tag-row">
+          <span class="tag tag-soft">{{ tr("Lifecycle") }}: {{ label("lifecycle_state", finding.lifecycle_state) }}</span>
+          <span class="tag">{{ tr("Review state") }}: {{ label("review_state", finding.review_state) }}</span>
+        </div>
         <p>{{ finding.description }}</p>
         {% if finding.references %}
         <div class="reference-list compact">
@@ -456,6 +794,31 @@
         {% endif %}
         {% if finding.recommendation %}
         <small>{{ finding.recommendation }}</small>
+        {% endif %}
+        {% if finding.fingerprint %}
+        <form class="finding-review-form" data-finding-review-form data-project-key="{{ job.metadata.get('project_key') }}" data-fingerprint="{{ finding.fingerprint }}">
+          <label>
+            <span>{{ tr("Review state") }}</span>
+            <select name="review_state">
+              {% for state_value, state_label in finding_review_states %}
+              <option value="{{ state_value }}" {% if finding.review_state == state_value %}selected{% endif %}>{{ state_label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>{{ tr("Operator note") }}</span>
+            <input type="text" name="review_note" value="{{ finding.review_note }}">
+          </label>
+          <label>
+            <span>{{ tr("Mute until") }}</span>
+            <input type="datetime-local" name="muted_until" value="{{ finding.muted_until[:16] if finding.muted_until else '' }}">
+          </label>
+          <div class="reference-actions">
+            <button type="submit" class="button-secondary">{{ tr("Save decision") }}</button>
+          </div>
+        </form>
+        {% else %}
+        <p class="empty-state">{{ tr("Review state controls are available after findings are fingerprinted.") }}</p>
         {% endif %}
       </article>
       {% endfor %}

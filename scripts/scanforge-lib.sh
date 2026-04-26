@@ -29,11 +29,32 @@ scanforge_load_project_env() {
 }
 
 
+# Проверяем готовность Python-окружения и печатаем единый bootstrap-совет при проблемах.
+scanforge_assert_python_runtime() {
+  local root_dir="$1"
+  local output
+  if output="$("$PYTHON_BIN" -m qa_portal.environment preflight --root "$root_dir" --format text 2>&1)"; then
+    return 0
+  fi
+  printf '%s\n' "$output" >&2
+  printf '\nЗапустите bootstrap: %s/scripts/setup-scanforge.sh\n' "$root_dir" >&2
+  return 1
+}
+
+
 # Проверка живого ScanForge идет через единый runtime helper.
 scanforge_healthcheck() {
   local host="$1"
   local port="$2"
   "$PYTHON_BIN" -m qa_portal.runtime healthcheck --host "$host" --port "$port"
+}
+
+
+# Отдельно проверяем, что работающий экземпляр соответствует текущему коду на диске.
+scanforge_compatibilitycheck() {
+  local host="$1"
+  local port="$2"
+  "$PYTHON_BIN" -m qa_portal.runtime compatibilitycheck --host "$host" --port "$port"
 }
 
 
@@ -99,18 +120,38 @@ scanforge_pid_is_running() {
 # Останавливаем фоновые процессы ScanForge и чистим pid-файлы.
 scanforge_stop_pid_file() {
   local pid_file="$1"
-  local pid
+  local pid pgid current_pgid
   if [[ ! -f "$pid_file" ]]; then
     return 0
   fi
 
   pid="$(cat "$pid_file" 2>/dev/null || true)"
   if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
+    pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d '[:space:]' || true)"
+    current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ "$pgid" =~ ^[0-9]+$ && "$pgid" != "$current_pgid" ]]; then
+      kill -- "-$pgid" 2>/dev/null || true
+    else
+      kill "$pid" 2>/dev/null || true
+    fi
     sleep 1
     if kill -0 "$pid" 2>/dev/null; then
-      kill -9 "$pid" 2>/dev/null || true
+      if [[ "$pgid" =~ ^[0-9]+$ && "$pgid" != "$current_pgid" ]]; then
+        kill -9 -- "-$pgid" 2>/dev/null || true
+      else
+        kill -9 "$pid" 2>/dev/null || true
+      fi
     fi
   fi
   rm -f "$pid_file"
 }
+
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  cat <<'EOF'
+scanforge-lib.sh is a shared helper library for ScanForge shell entrypoints.
+
+Source it from another script:
+  source ./scripts/scanforge-lib.sh
+EOF
+fi

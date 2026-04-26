@@ -128,6 +128,108 @@
         </label>
       </div>
 
+      <section class="upload-progress-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">{{ tr("Upload from CI") }}</p>
+            <h2>{{ tr("CI/CD context") }}</h2>
+          </div>
+        </div>
+        <p class="section-copy">{{ tr("Attach optional repository and pipeline metadata to make handoff and reports richer.") }}</p>
+        <div class="two-column">
+          <label>
+            <span>{{ tr("Integration provider") }}</span>
+            <select name="integration_provider">
+              <option value="">{{ tr("none") }}</option>
+              <option value="gitlab">GitLab</option>
+              <option value="github">GitHub</option>
+              <option value="jenkins">Jenkins</option>
+              <option value="teamcity">TeamCity</option>
+              <option value="azure_devops">Azure DevOps</option>
+            </select>
+          </label>
+          <label>
+            <span>{{ tr("Repository") }}</span>
+            <input type="text" name="repository_url" placeholder="https://example.org/group/project.git">
+          </label>
+          <label>
+            <span>{{ tr("Branch") }}</span>
+            <input type="text" name="branch" placeholder="main">
+          </label>
+          <label>
+            <span>{{ tr("Commit") }}</span>
+            <input type="text" name="commit_sha" placeholder="a1b2c3d4">
+          </label>
+          <label>
+            <span>{{ tr("Pipeline") }}</span>
+            <input type="text" name="pipeline_url" placeholder="https://ci.example.org/pipelines/123">
+          </label>
+          <label>
+            <span>{{ tr("Merge request") }}</span>
+            <input type="text" name="merge_request" placeholder="!42 / PR-42">
+          </label>
+        </div>
+      </section>
+
+      <section class="upload-progress-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">{{ tr("Runtime verification") }}</p>
+            <h2>{{ tr("DAST and IAST runtime") }}</h2>
+          </div>
+        </div>
+        <p class="section-copy">{{ tr("Attach a runtime target, verification profile, and optional authentication to enable live API verification and replay artifacts.") }}</p>
+        <div class="two-column">
+          <label>
+            <span>{{ tr("Runtime target URL") }}</span>
+            <input type="text" name="service_target_url" placeholder="http://127.0.0.1:8080">
+          </label>
+          <label>
+            <span>{{ tr("Verification profile") }}</span>
+            <select name="service_runtime_profile">
+              <option value="passive">{{ tr("passive") }}</option>
+              <option value="safe-active">{{ tr("safe-active") }}</option>
+            </select>
+          </label>
+          <label>
+            <span>{{ tr("Request timeout, seconds") }}</span>
+            <input type="number" name="service_request_timeout_seconds" min="1" max="30" value="3">
+          </label>
+          <label>
+            <span>{{ tr("Authentication token") }}</span>
+            <input type="password" name="auth_token" placeholder="{{ tr('Optional bearer or API token') }}">
+          </label>
+          <label>
+            <span>{{ tr("Auth header name") }}</span>
+            <input type="text" name="auth_header_name" value="Authorization" placeholder="Authorization / X-API-Key">
+          </label>
+          <label>
+            <span>{{ tr("Auth token prefix") }}</span>
+            <input type="text" name="auth_token_prefix" value="Bearer" placeholder="Bearer">
+          </label>
+          <label>
+            <span>{{ tr("Basic auth username") }}</span>
+            <input type="text" name="basic_auth_username" placeholder="tester">
+          </label>
+          <label>
+            <span>{{ tr("Basic auth password") }}</span>
+            <input type="password" name="basic_auth_password" placeholder="secret">
+          </label>
+          <label>
+            <span>{{ tr("Cookie name") }}</span>
+            <input type="text" name="auth_cookie_name" placeholder="sessionid">
+          </label>
+          <label>
+            <span>{{ tr("Cookie value") }}</span>
+            <input type="password" name="auth_cookie" placeholder="{{ tr('Optional session cookie') }}">
+          </label>
+          <label class="panel-span-2">
+            <span>{{ tr("Extra request headers, JSON") }}</span>
+            <textarea name="service_request_headers" rows="4" placeholder='{"X-Tenant": "demo"}'></textarea>
+          </label>
+        </div>
+      </section>
+
       <label class="file-field">
         <span>{{ tr("Upload one or several project archives or source files") }}</span>
         <input type="hidden" name="retest_scope" value="full_project" data-retest-scope-input>

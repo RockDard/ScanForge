@@ -12,4 +12,10 @@ source "$ROOT_DIR/scripts/scanforge-lib.sh"
 scanforge_init_python "$ROOT_DIR"
 scanforge_load_project_env "$ROOT_DIR"
 
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  exec "$PYTHON_BIN" -m qa_portal.knowledge_base "$@"
+fi
+
+scanforge_assert_python_runtime "$ROOT_DIR"
+
 "$PYTHON_BIN" -m qa_portal.knowledge_base "$@"
