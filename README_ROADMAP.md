@@ -26,7 +26,7 @@
 - `[DONE]` Ранее выполнены Linux-side проверки `./run-tests.sh`, `./scripts/run-web-smoke.sh`, `pip check`, `bash -n scripts/*.sh`; текущие изменения после отказа от WSL проверяются только Windows-side unit/static проверками и помечаются `[CODE-UNTESTED]` до smoke на Ubuntu 22.04.
 - `[DONE]` Доступные Windows-side проверки от 2026-04-27 прошли: `py -m unittest discover -s tests` - 90 tests OK, 15 skipped из-за Linux-only runtime/broken WSL или отсутствующих dependency packages; `py_compile` для всех Python-файлов; `validate-matrix` для `tests/fixtures/ubuntu_2204_test_matrix.json`.
 - `[BLOCKED]` Целевой Ubuntu 22.04 smoke/e2e и фактический validation report не выполнены в текущей среде; требуется реальный Ubuntu 22.04 host без WSL/Docker.
-- `[BLOCKED]` `tests.test_portal_app` в текущем Windows Python не запускался из-за отсутствующего `fastapi`; это не подтверждает и не опровергает работу портала на целевой Ubuntu 22.04 среде.
+- `[BLOCKED]` Linux-only portal/worker/shell tests в текущей Windows-среде пропускаются из-за отсутствия целевого runtime, рабочего bash/WSL или dependency packages; это не подтверждает и не опровергает работу портала на целевой Ubuntu 22.04 среде.
 - `[PARTIAL]` `[CODE-UNTESTED]` Без Linux runtime дополнительно реализованы audit log, production reverse-proxy/TLS документация и release checklist CLI для будущего Ubuntu 22.04 validation report; нужен целевой smoke/e2e на Ubuntu 22.04.
 
 ## Пункт 1. Базовая надежность и эксплуатационная готовность
